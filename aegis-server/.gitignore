@@ -1,0 +1,14 @@
+# Python virtual environment
+venv/
+
+# Configuration files with secrets
+config.toml
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE files
+.idea/
+.vscode/
