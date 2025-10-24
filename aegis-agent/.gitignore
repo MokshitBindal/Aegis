@@ -1,0 +1,18 @@
+# Python virtual environment
+venv/
+
+# Local databases
+*.db
+*.db-journal
+
+# Local agent ID
+agent.id
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE files
+.idea/
+.vscode/
