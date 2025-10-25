@@ -51,3 +51,33 @@ class TokenData(BaseModel):
     Pydantic model for the data encoded within a JWT.
     """
     email: EmailStr | None = None
+
+class Invitation(BaseModel):
+    """
+    Model for the response when a user requests an invitation token.
+    We send the raw token to the user *once*.
+    """
+    token: str
+    expires_at: datetime
+
+class DeviceRegister(BaseModel):
+    """
+    Model for the agent's registration request.
+    This is what the agent sends to the /device/register endpoint.
+    """
+    token: str # The raw token
+    agent_id: uuid.UUID
+    hostname: str
+    name: str # A user-friendly name, e.g. "dev-laptop"
+
+class Device(BaseModel):
+    """
+    Model for representing a device as sent to the UI.
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    agent_id: uuid.UUID
+    name: str
+    hostname: str
+    registered_at: datetime
