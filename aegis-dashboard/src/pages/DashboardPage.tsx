@@ -2,9 +2,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../lib/api";
-import { useWebSocket } from "../hooks/useWebSocket"; // <--- IMPORT HOOK
+import { useWebSocket } from "../hooks/useWebSocket";
+import { Link } from "react-router-dom"; // <--- 1. IMPORT LINK
 
-// This matches the 'Device' Pydantic model
+// ... (interface Device and DeviceStatusMap are unchanged) ...
 interface Device {
   id: number;
   agent_id: string;
@@ -12,40 +13,25 @@ interface Device {
   hostname: string;
   registered_at: string;
 }
-
-// We'll store device status in a separate object
-// { "agent-uuid-123": "online", "agent-uuid-456": "offline" }
 type DeviceStatusMap = Record<string, "online" | "offline">;
 
 export default function DashboardPage() {
   const { logout } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
-  // --- 1. CREATE STATE FOR STATUSES ---
   const [statuses, setStatuses] = useState<DeviceStatusMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- 2. HANDLE INCOMING WEBSOCKET MESSAGES ---
   const handleWsMessage = useCallback((data: any) => {
     if (data.type === "agent_status") {
       const { agent_id, status } = data.payload;
-      // Update our status state
-      setStatuses((prev) => ({
-        ...prev,
-        [agent_id]: status,
-      }));
-
-      // Optional: Set a timer to mark as "offline" after a while
+      setStatuses((prev) => ({ ...prev, [agent_id]: status }));
       setTimeout(() => {
-        setStatuses((prev) => ({
-          ...prev,
-          [agent_id]: "offline",
-        }));
-      }, 65000); // 65 seconds
+        setStatuses((prev) => ({ ...prev, [agent_id]: "offline" }));
+      }, 65000);
     }
   }, []);
 
-  // --- 3. INITIALIZE THE WEBSOCKET ---
   useWebSocket(handleWsMessage);
 
   useEffect(() => {
@@ -54,7 +40,6 @@ export default function DashboardPage() {
         setLoading(true);
         const response = await api.get("/api/devices");
         setDevices(response.data);
-        // Initialize all devices as 'offline'
         const initialStatuses: DeviceStatusMap = {};
         for (const device of response.data) {
           initialStatuses[device.agent_id] = "offline";
@@ -94,13 +79,14 @@ export default function DashboardPage() {
                 <li className="p-4">No devices registered yet.</li>
               ) : (
                 devices.map((device) => {
-                  // --- 4. GET DYNAMIC STATUS ---
                   const status = statuses[device.agent_id] || "offline";
 
                   return (
-                    <li
+                    // --- 2. WRAP LIST ITEM IN A LINK ---
+                    <Link
                       key={device.id}
-                      className="flex items-center justify-between p-4"
+                      to={`/device/${device.agent_id}`}
+                      className="flex items-center justify-between p-4 hover:bg-gray-700"
                     >
                       <div>
                         <p className="text-lg font-semibold">{device.name}</p>
@@ -110,7 +96,6 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        {/* --- 5. DYNAMIC STATUS BADGE --- */}
                         <span
                           className={`inline-block px-3 py-1 text-sm rounded-full ${
                             status === "online"
@@ -125,7 +110,7 @@ export default function DashboardPage() {
                           {new Date(device.registered_at).toLocaleDateString()}
                         </p>
                       </div>
-                    </li>
+                    </Link>
                   );
                 })
               )}

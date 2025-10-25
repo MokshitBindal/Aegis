@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware # <--- 1. IMPORT THIS
 
 from internal.storage.postgres import init_db_pool, close_db_pool
-from routers import ingest, auth, device, websocket
+from routers import ingest, auth, device, websocket, query
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,6 +41,7 @@ app.include_router(ingest.router, prefix="/api")
 app.include_router(auth.router, prefix="/auth")
 app.include_router(device.router, prefix="/api")
 app.include_router(websocket.router) 
+app.include_router(query.router, prefix="/api")
 
 @app.get("/")
 async def root():
