@@ -7,4 +7,4 @@
 ehthumbs.db
 Thumbs.db
 
-detect_os.sh
+./detect_os.sh
