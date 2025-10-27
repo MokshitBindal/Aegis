@@ -1,0 +1,23 @@
+# aegis-agent/internal/analysis/rules.py
+
+def check_failed_ssh(log_message: str) -> bool:
+    """
+    Checks if a log message indicates a failed SSH login attempt.
+    
+    Args:
+        log_message (str): The log message string.
+        
+    Returns:
+        bool: True if it matches the rule, False otherwise.
+    """
+    # This is a common pattern for failed SSH logins in journald/syslog
+    if "Failed password for" in log_message:
+        return True
+    if "authentication failure" in log_message.lower() and "sshd" in log_message.lower():
+         return True
+        
+    return False
+
+# --- We can add more rule functions here later ---
+# def check_sudo_failure(log_message: str) -> bool:
+#     ...

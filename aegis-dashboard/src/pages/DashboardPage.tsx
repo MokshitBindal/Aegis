@@ -68,7 +68,12 @@ export default function DashboardPage() {
       </header>
 
       <main className="mt-8">
-        <h2 className="text-2xl font-semibold">My Devices</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-semibold">My Devices</h2>
+          <Link to="/alerts" className="text-blue-400 hover:underline">
+            View Alerts
+          </Link>
+        </div>
         <div className="mt-4 overflow-hidden bg-gray-800 rounded-lg shadow">
           {loading && <p className="p-4">Loading devices...</p>}
           {error && <p className="p-4 text-red-400">{error}</p>}

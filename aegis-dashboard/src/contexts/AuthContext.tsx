@@ -43,7 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       });
 
+      // --- ADD LOGS HERE ---
+      console.log("AuthContext: API Login Response:", response.data);
       const { access_token } = response.data;
+      console.log("AuthContext: Extracted Token:", access_token);
+      // --------------------
+
       setToken(access_token);
     } catch (err) {
       console.error("Login failed:", err);

@@ -1,0 +1,23 @@
+# aegis-agent/scripts/aegis-agent.service
+
+[Unit]
+Description=Aegis SIEM Agent
+After=network.target
+
+[Service]
+Type=simple
+
+# Execute the script via bash
+ExecStart=/bin/bash /home/Mokshit/Documents/Programming_files/My_Projects/aegis-siem/aegis-agent/scripts/run_agent.sh
+
+# --- FIX: Reinstate escaped WorkingDirectory ---
+# The CHDIR error suggests systemd needs this set correctly.
+WorkingDirectory=/home/Mokshit/Documents/Programming_files/My_Projects/aegis-siem/aegis-agent
+
+User=root
+Group=root
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

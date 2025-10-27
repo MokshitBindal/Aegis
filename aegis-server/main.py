@@ -1,18 +1,40 @@
 # aegis-server/main.py
 
+import asyncio # <--- IMPORT ASYNCIO
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from fastapi.middleware.cors import CORSMiddleware # <--- 1. IMPORT THIS
+from fastapi.middleware.cors import CORSMiddleware
 
 from internal.storage.postgres import init_db_pool, close_db_pool
-from routers import ingest, auth, device, websocket, query
+# --- IMPORT THE ANALYSIS LOOP ---
+from internal.analysis.correlation import run_analysis_loop
+from routers import ingest, auth, device, websocket, query, alerts
+
+# Store the background task so we can cancel it on shutdown
+background_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global background_task
     print("Server starting up...")
     await init_db_pool()
-    yield
+    
+    # --- START BACKGROUND TASK ---
+    print("Starting background analysis task...")
+    background_task = asyncio.create_task(run_analysis_loop())
+    
+    yield  # Application runs here
+    
+    # --- SHUTDOWN ---
     print("Server shutting down...")
+    if background_task:
+        print("Stopping background analysis task...")
+        background_task.cancel()
+        try:
+            await background_task
+        except asyncio.CancelledError:
+            print("Background analysis task cancelled.")
+            
     await close_db_pool()
 
 app = FastAPI(
@@ -22,17 +44,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# --- 2. ADD THIS MIDDLEWARE BLOCK ---
-# This is the "permission slip" for our browser
 app.add_middleware(
     CORSMiddleware,
-    # This is the URL of our React app
-    allow_origins=["http://localhost:5173"], 
-    # Allow credentials (like cookies, though we use tokens)
-    allow_credentials=True, 
-    # Allow all HTTP methods
+    allow_origins=["http://localhost:5174"],
+    allow_credentials=True,
     allow_methods=["*"],
-    # Allow all headers (including our 'Authorization' header)
     allow_headers=["*"],
 )
 
@@ -40,8 +56,9 @@ app.add_middleware(
 app.include_router(ingest.router, prefix="/api")
 app.include_router(auth.router, prefix="/auth")
 app.include_router(device.router, prefix="/api")
-app.include_router(websocket.router) 
+app.include_router(websocket.router)
 app.include_router(query.router, prefix="/api")
+app.include_router(alerts.router, prefix="/api")
 
 @app.get("/")
 async def root():
