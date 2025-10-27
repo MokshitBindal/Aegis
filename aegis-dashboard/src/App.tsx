@@ -3,18 +3,29 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
-import DeviceDetailsPage from "./pages/DeviceDetailsPage"; // <--- 1. IMPORT
+import DeviceDetailsPage from "./pages/DeviceDetailsPage";
+import AlertsPage from "./pages/AlertsPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
-  if (!token) {
+  const { token: contextToken } = useAuth(); // Get token from context
+  const storedToken = localStorage.getItem("aegis_token"); // Get token from storage
+
+  // --- ADD LOG HERE ---
+  console.log("ProtectedRoute Check:", { contextToken, storedToken });
+  // --------------------
+
+  const isAuthenticated = contextToken || storedToken;
+
+  if (!isAuthenticated) {
+    console.log("ProtectedRoute: Not authenticated, redirecting to /login"); // Optional log
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
 
 function AppRoutes() {
+  // ... (No changes in AppRoutes function)
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -26,9 +37,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
-      {/* --- 2. ADD THE NEW ROUTE --- */}
-      {/* :agentId is a URL parameter */}
       <Route
         path="/device/:agentId"
         element={
@@ -37,13 +45,21 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
+      <Route
+        path="/alerts"
+        element={
+          <ProtectedRoute>
+            <AlertsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
 export default function App() {
+  // ... (No changes in App component)
   return (
     <AuthProvider>
       <BrowserRouter>

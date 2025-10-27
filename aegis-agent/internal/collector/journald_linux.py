@@ -3,41 +3,30 @@
 import systemd.journal
 import json
 import time
-import datetime 
-# We no longer need to print, so we can remove some of the
-# "print()" spam from the process_entry method.
+import datetime
+from internal.analysis.rules import check_failed_ssh
+
+# Define the agent's own service name to ignore
+AGENT_SERVICE_NAME = "aegis-agent.service"
 
 class JournaldCollector:
-    
-    def __init__(self, storage): # <--- MODIFICATION: Accept storage object
-        """
-        Initializes the JournaldCollector.
-        
-        Args:
-            storage (Storage): The SQLite storage instance.
-        """
+
+    def __init__(self, storage):
         print("JournaldCollector initialized.")
-        self.storage = storage # <--- MODIFICATION: Save storage object
+        self.storage = storage
         self.reader = None
 
     def run(self):
-        """
-        Starts the log collection loop.
-        This method is designed to be run in a separate thread.
-        """
         print("Collector thread started. Opening journal...")
         try:
             self.reader = systemd.journal.Reader()
-            
             print("Seeking to journal tail...")
             self.reader.seek_tail()
             self.reader.get_previous()
-
             print("Journal opened. Tailing for new log entries...")
 
             while True:
                 event = self.reader.wait()
-                
                 if event == systemd.journal.APPEND:
                     for entry in self.reader:
                         self.process_entry(entry)
@@ -45,22 +34,29 @@ class JournaldCollector:
         except PermissionError:
             print("\nCRITICAL ERROR: Permission denied.")
             print("Could not read system journal. Please run the agent with 'sudo'.")
-            print("e.g.,: sudo venv/bin/python main.py run\n")
         except Exception as e:
             print(f"Error in JournaldCollector run loop: {e}")
             time.sleep(10)
 
     def process_entry(self, entry):
         """
-        Processes a single log entry and writes it to storage.
-        
-        Args:
-            entry (systemd.journal.Entry): A dict-like journal entry.
+        Processes a single log entry, writes it to storage,
+        and checks it against local analysis rules.
         """
-        
-        entry_dict = {}
         try:
-            # Decode all fields into a plain dict
+            # --- FIX: Check if the log is from the agent itself ---
+            # The '_SYSTEMD_UNIT' field tells us which service generated the log.
+            # We must decode it if it's bytes.
+            unit = entry.get("_SYSTEMD_UNIT")
+            if isinstance(unit, bytes):
+                unit = unit.decode('utf-8', 'replace')
+
+            if unit == AGENT_SERVICE_NAME:
+                # print(f"[DEBUG] Ignoring self-generated log entry.") # Optional debug line
+                return # Skip processing this entry entirely
+
+            # --- If it's not our own log, proceed as before ---
+            entry_dict = {}
             for key, val in entry.items():
                 if isinstance(val, bytes):
                     val_str = val.decode('utf-8', 'replace')
@@ -68,30 +64,32 @@ class JournaldCollector:
                     val_str = str(val)
                 entry_dict[key] = val_str
 
-            # --- MODIFICATION: Prepare data and write to DB ---
-            
-            # Get the key fields
             message = entry_dict.get("MESSAGE", "N/A")
             hostname = entry_dict.get("_HOSTNAME", "N/A")
-            
+
             if "__REALTIME_TIMESTAMP" in entry:
                 timestamp = entry["__REALTIME_TIMESTAMP"]
             else:
                 timestamp = datetime.datetime.now(datetime.timezone.utc)
-            
-            # This is the data object our storage class expects
+
             log_data = {
                 "timestamp": timestamp,
                 "hostname": hostname,
                 "message": message,
                 "raw_json": json.dumps(entry_dict, default=str)
             }
-            
-            # Write it to the database!
+
             self.storage.write_log(log_data)
-            
-            # We can print a small confirmation
-            print(f"[LOG STORED] Host: {hostname}, Msg: {message[:50]}...")
+            # Shorten the print message to reduce log spam further
+            print(f"[Stored] {hostname}: {message[:60]}...")
+
+            # Run Local Analysis Rules
+            if check_failed_ssh(message):
+                print("\n" + "="*20)
+                print(">>> LOCAL ALERT: Failed SSH Login Detected!")
+                print(f">>> Details: {message}")
+                print("="*20 + "\n")
 
         except Exception as e:
             print(f"Error processing entry: {e}")
+
