@@ -6,10 +6,11 @@ import requests
 import json
 from typing import List, Dict, Any
 
-# This is the (default) URL of our FastAPI server's endpoint
-SERVER_URL = "http://127.0.0.1:8000/api/ingest"
 BATCH_SIZE = 100
 FORWARD_INTERVAL_SECONDS = 30 # How often to check for new logs
+
+# Default server URL (used only if secure credentials are not available)
+DEFAULT_SERVER_URL = "http://127.0.0.1:8000/api/ingest"
 
 class Forwarder:
     """
@@ -17,7 +18,7 @@ class Forwarder:
     SQLite DB to the central server.
     """
     
-    def __init__(self, storage, agent_id: str):
+    def __init__(self, storage, agent_id: str = None):
         """
         Initializes the Forwarder.
         
@@ -26,8 +27,30 @@ class Forwarder:
             agent_id (str): The agent's unique UUID.
         """
         self.storage = storage
-        self.agent_id = agent_id
-        self.server_url = SERVER_URL
+        # Try to load server URL and agent credentials from secure storage
+        try:
+            from internal.agent.credentials import load_credentials
+            creds = load_credentials()
+        except Exception:
+            creds = None
+
+        if creds:
+            # Credentials contain server_url and agent_id
+            server_base = creds.get("server_url")
+            if server_base:
+                # Ensure we point at the ingest path
+                if server_base.endswith("/"):
+                    self.server_url = server_base.rstrip("/") + "/api/ingest"
+                else:
+                    self.server_url = server_base + "/api/ingest"
+            else:
+                self.server_url = DEFAULT_SERVER_URL
+
+            self.agent_id = creds.get("agent_id") or agent_id
+        else:
+            self.server_url = DEFAULT_SERVER_URL
+            self.agent_id = agent_id
+
         self.headers = {
             "Content-Type": "application/json",
             "X-Aegis-Agent-ID": self.agent_id
