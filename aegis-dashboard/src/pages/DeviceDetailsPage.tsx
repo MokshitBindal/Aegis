@@ -69,8 +69,18 @@ export default function DeviceDetailsPage() {
         <Link to="/" className="text-sm text-blue-400 hover:underline">
           &larr; Back to Dashboard
         </Link>
-        <h1 className="text-3xl font-bold">Log Viewer</h1>
-        <p className="text-sm text-gray-400">Agent ID: {agentId}</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Log Viewer</h1>
+            <p className="text-sm text-gray-400">Agent ID: {agentId}</p>
+          </div>
+          <Link
+            to={`/device/${agentId}/metrics`}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            View Metrics
+          </Link>
+        </div>
       </header>
 
       {/* Timeframe Selector */}

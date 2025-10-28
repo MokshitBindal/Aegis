@@ -6,10 +6,11 @@ registration data using the system keyring when available,
 falling back to an encrypted file if keyring is not accessible.
 """
 
-import os
-import json
 import base64
+import json
+import os
 from pathlib import Path
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC

@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeviceDetailsPage from "./pages/DeviceDetailsPage";
 import AlertsPage from "./pages/AlertsPage";
+import MetricsPage from "./pages/MetricsPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -50,6 +51,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AlertsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/device/:deviceId/metrics"
+        element={
+          <ProtectedRoute>
+            <MetricsPage />
           </ProtectedRoute>
         }
       />

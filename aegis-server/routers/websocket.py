@@ -1,8 +1,8 @@
 # aegis-server/routers/websocket.py
 
-from fastapi import APIRouter, WebSocket, Depends, WebSocketDisconnect
-from internal.auth.jwt import get_current_user
-from models.models import TokenData
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from internal.utils.json import dumps
 
 router = APIRouter()
 
@@ -36,8 +36,9 @@ async def websocket_endpoint(
         try:
             # We have to manually implement auth dependency logic here
             # (This is a simplified version for brevity)
-            from internal.auth.jwt import jwt, settings, JWTError
+            from internal.auth.jwt import JWTError, jwt, settings
             from internal.storage.postgres import get_db_pool
+
             from .device import get_user_by_email
 
             payload = jwt.decode(
@@ -72,12 +73,10 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         print(f"WebSocket disconnected for user {user_id}")
-        if user_id in active_connections:
-            del active_connections[user_id]
+        active_connections.pop(user_id, None)
     except Exception as e:
         print(f"WebSocket error: {e}")
-        if user_id in active_connections:
-            del active_connections[user_id]
+        active_connections.pop(user_id, None)
         await websocket.close()
 
 # We will call this function from other parts of our app
@@ -85,10 +84,13 @@ async def websocket_endpoint(
 async def push_update_to_user(user_id: int, message: dict):
     """
     Pushes a JSON message to a specific user's WebSocket.
+    Uses custom JSON encoder to handle datetime and UUID objects.
     """
     if user_id in active_connections:
         try:
-            await active_connections[user_id].send_json(message)
+            # Use raw send_text with our custom JSON encoder to handle datetime/UUID
+            json_str = dumps(message)
+            await active_connections[user_id].send_text(json_str)
         except Exception as e:
             print(f"Failed to push WS message: {e}")
             # Connection might be dead, remove it

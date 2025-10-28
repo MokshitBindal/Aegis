@@ -1,14 +1,15 @@
 # aegis-server/main.py
 
-import asyncio # <--- IMPORT ASYNCIO
-from fastapi import FastAPI
+import asyncio  # <--- IMPORT ASYNCIO
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from internal.storage.postgres import init_db_pool, close_db_pool
 # --- IMPORT THE ANALYSIS LOOP ---
 from internal.analysis.correlation import run_analysis_loop
-from routers import ingest, auth, device, websocket, query, alerts
+from internal.storage.postgres import close_db_pool, init_db_pool
+from routers import alerts, auth, device, ingest, metrics, query, websocket
 
 # Store the background task so we can cancel it on shutdown
 background_task = None
@@ -59,6 +60,7 @@ app.include_router(device.router, prefix="/api")
 app.include_router(websocket.router)
 app.include_router(query.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
+app.include_router(metrics.router, prefix="/api")
 
 @app.get("/")
 async def root():

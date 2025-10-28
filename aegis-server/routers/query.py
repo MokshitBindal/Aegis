@@ -1,16 +1,17 @@
 # aegis-server/routers/query.py
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from typing import List, Literal
-import asyncpg
+from datetime import UTC, datetime, timedelta
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from internal.auth.jwt import get_current_user
 from internal.storage.postgres import get_db_pool
 from models.models import TokenData
+
 # We need the user helper from the device router
-from routers.device import get_user_by_email 
+from routers.device import get_user_by_email
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ async def get_logs_for_agent(
     }
     
     # Calculate the start time
-    start_time = datetime.now(timezone.utc) - time_deltas[timeframe]
+    start_time = datetime.now(UTC) - time_deltas[timeframe]
     
     try:
         async with pool.acquire() as conn:
@@ -54,7 +55,10 @@ async def get_logs_for_agent(
             device = await conn.fetchrow(sql_check, user.id, agent_id)
             if not device:
                 # If no record, this user does not own this agent
-                raise HTTPException(status_code=403, detail="Access forbidden: You do not own this agent")
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access forbidden: You do not own this agent",
+                )
             
             # --- If check passes, fetch the logs ---
             # This query is fast because 'logs' is a hypertable!

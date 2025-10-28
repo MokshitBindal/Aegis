@@ -13,8 +13,9 @@ def check_failed_ssh(log_message: str) -> bool:
     # This is a common pattern for failed SSH logins in journald/syslog
     if "Failed password for" in log_message:
         return True
-    if "authentication failure" in log_message.lower() and "sshd" in log_message.lower():
-         return True
+    lower_msg = log_message.lower()
+    if "authentication failure" in lower_msg and "sshd" in lower_msg:
+        return True
         
     return False
 

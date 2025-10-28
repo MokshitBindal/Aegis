@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add the parent directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from internal.storage.postgres import init_db_pool, get_db_pool, close_db_pool
+from internal.storage.postgres import close_db_pool, get_db_pool, init_db_pool
+
 
 async def cleanup_server_logs():
     """Cleans up all logs from the PostgreSQL database"""
