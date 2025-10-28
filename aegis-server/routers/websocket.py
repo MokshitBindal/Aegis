@@ -3,6 +3,7 @@
 from fastapi import APIRouter, WebSocket, Depends, WebSocketDisconnect
 from internal.auth.jwt import get_current_user
 from models.models import TokenData
+from internal.utils.json import dumps
 
 router = APIRouter()
 
@@ -85,10 +86,13 @@ async def websocket_endpoint(
 async def push_update_to_user(user_id: int, message: dict):
     """
     Pushes a JSON message to a specific user's WebSocket.
+    Uses custom JSON encoder to handle datetime and UUID objects.
     """
     if user_id in active_connections:
         try:
-            await active_connections[user_id].send_json(message)
+            # Use raw send_text with our custom JSON encoder to handle datetime/UUID
+            json_str = dumps(message)
+            await active_connections[user_id].send_text(json_str)
         except Exception as e:
             print(f"Failed to push WS message: {e}")
             # Connection might be dead, remove it

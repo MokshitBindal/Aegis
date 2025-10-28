@@ -15,7 +15,7 @@ import requests
 from internal.agent.id import get_agent_id
 from internal.agent.credentials import store_credentials, load_credentials, is_registered
 from internal.storage.sqlite import Storage
-from internal.forwarder.forwarder import Forwarder # <--- IMPORT FORWARDER
+from internal.forwarder.forwarder import Forwarder
 
 def main():
     # ... (no changes to main()) ...
@@ -78,9 +78,24 @@ def run_agent(args):
     print(f"Starting agent (ID: {args.agent_id})...")
     
     collector_thread = None
+    metrics_thread = None
+    metrics_collector = None
+    
+    # --- Initialize Metrics Collector ---
+    try:
+        from internal.metrics.collector import MetricsCollector
+        metrics_collector = MetricsCollector(interval=60, agent_id=str(args.agent_id))  # Pass agent_id at initialization
+        metrics_thread = metrics_collector.start()  # This will now succeed since we have agent_id
+        print("Metrics collector initialized and started.")
+    except ImportError as e:
+        print(f"Warning: Could not initialize metrics collector: {e}")
+        metrics_collector = None
+    except Exception as e:
+        print(f"Error starting metrics collector: {e}")
+        metrics_collector = None
     
     # --- MODIFICATION: Initialize Forwarder ---
-    forwarder = Forwarder(storage=args.storage, agent_id=args.agent_id)
+    forwarder = Forwarder(storage=args.storage, agent_id=args.agent_id, metrics_collector=metrics_collector)
     
     collector = None
     if args.os_name == "Linux":
@@ -148,8 +163,13 @@ def run_agent(args):
         print("\nShutdown signal received. Stopping agent...")
         
     finally:
-        # --- MODIFICATION: Stop Forwarder cleanly ---
-        forwarder.stop()
+        # Stop all components cleanly
+        if metrics_collector:
+            metrics_collector._stop_event.set()  # Signal metrics collector to stop
+            if metrics_thread:
+                metrics_thread.join(timeout=5)  # Wait up to 5 seconds for metrics thread
+        
+        forwarder.stop()  # This includes stopping its own metrics collector reference
         args.storage.close()
         print("Agent stopped.")
 

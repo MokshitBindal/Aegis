@@ -39,3 +39,4 @@ cryptography>=42.0.0
 keyring>=24.2.0
 requests>=2.31.0
 systemd
+psutil>=5.9.0  # For system metrics collection
