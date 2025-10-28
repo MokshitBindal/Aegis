@@ -24,7 +24,7 @@ async def get_user_by_email(email: str, conn) -> UserInDB | None:
     return None
 
 
-@router.post("/device/invite", response_model=Invitation)
+@router.post("/device/create-invitation", response_model=Invitation)
 async def create_invitation(
     request: Request,
     current_user: TokenData = Depends(get_current_user)
