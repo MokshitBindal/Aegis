@@ -1,6 +1,7 @@
 # aegis-server/internal/auth/jwt.py
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -20,7 +21,7 @@ def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     
     # Set the token expiration time
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(UTC) + timedelta(
         minutes=settings.jwt.access_token_expire_minutes
     )
     to_encode.update({"exp": expire})

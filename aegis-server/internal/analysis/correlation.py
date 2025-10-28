@@ -1,13 +1,14 @@
 # aegis-server/internal/analysis/correlation.py
 
 import asyncio
-import asyncpg
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
+import asyncpg
 
 from internal.storage.postgres import get_db_pool
+
 # We need the WebSocket pusher to notify the dashboard
-from routers.websocket import push_update_to_user
 
 # How often the analysis loop runs
 ANALYSIS_INTERVAL_SECONDS = 60
@@ -45,7 +46,7 @@ async def check_potential_brute_force(conn: asyncpg.Connection):
     """
     rule_name = "Potential Distributed Brute Force"
     # Calculate the time window
-    start_time = datetime.now(timezone.utc) - timedelta(minutes=LOOKBACK_MINUTES)
+    start_time = datetime.now(UTC) - timedelta(minutes=LOOKBACK_MINUTES)
 
     # Note: This query assumes your raw_data JSONB contains a field
     #       like '_SOURCE_REALTIME_TIMESTAMP' or similar, and potentially
@@ -67,7 +68,8 @@ async def check_potential_brute_force(conn: asyncpg.Connection):
     FROM logs
     WHERE
         timestamp >= $1
-        AND raw_data->>'login_success' = 'false' -- Adjust condition based on actual data
+        -- Adjust condition based on actual data
+        AND raw_data->>'login_success' = 'false'
         AND raw_data->>'source_ip' IS NOT NULL
     GROUP BY source_ip
     HAVING
@@ -102,7 +104,9 @@ async def check_potential_brute_force(conn: asyncpg.Connection):
         # Don't crash the loop, just log the error
 
 
-async def save_alert(conn: asyncpg.Connection, rule_name: str, details: dict, severity: str):
+async def save_alert(
+    conn: asyncpg.Connection, rule_name: str, details: dict, severity: str
+):
     """
     Saves a generated alert to the database and pushes a notification.
     """
@@ -116,9 +120,10 @@ async def save_alert(conn: asyncpg.Connection, rule_name: str, details: dict, se
 
         # --- Push notification via WebSocket ---
         # We need to notify ALL users who might be affected.
-        # A simple approach for now: find owners of the involved agents (complex query needed)
-        # OR just broadcast to all connected admins (simpler for now).
-        # We don't have user roles yet, so let's skip targeted push for now.
+        # A simple approach for now: find owners of the involved agents
+        # (complex query needed) OR just broadcast to all connected admins
+        # (simpler for now). We don't have user roles yet, so let's skip
+        # targeted push for now.
 
         print(f"Alert saved to DB (ID: {result['id']})")
         

@@ -1,10 +1,10 @@
 # aegis-agent/internal/storage/sqlite.py
 
+import json
 import sqlite3
 import threading
-import json
 from datetime import datetime
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Define the database file name
 DB_FILE = "agent.db"
@@ -85,7 +85,7 @@ class Storage:
             print(f"Error writing log to SQLite: {e}")
 
     # --- NEW METHOD ---
-    def get_unforwarded_logs(self, batch_size: int = 100) -> List[Dict[str, Any]]:
+    def get_unforwarded_logs(self, batch_size: int = 100) -> list[dict[str, Any]]:
         """
         Retrieves a batch of logs that have not yet been forwarded.
         
@@ -109,7 +109,7 @@ class Storage:
             return []
 
     # --- NEW METHOD ---
-    def mark_logs_as_forwarded(self, log_ids: List[int]):
+    def mark_logs_as_forwarded(self, log_ids: list[int]):
         """
         Updates a list of logs to set their 'forwarded' status to 1.
         

@@ -1,10 +1,12 @@
 # aegis-agent/internal/forwarder/forwarder.py
 
+import json
 import threading
 import time
+from datetime import UTC
+from typing import Any, Dict, List
+
 import requests
-import json
-from typing import List, Dict, Any
 
 BATCH_SIZE = 100
 FORWARD_INTERVAL_SECONDS = 30 # How often to check for new logs
@@ -18,7 +20,7 @@ class Forwarder:
     SQLite DB to the central server.
     """
     
-    def __init__(self, storage, agent_id: str = None, metrics_collector=None):
+    def __init__(self, storage, agent_id: str | None = None, metrics_collector=None):
         """
         Initializes the Forwarder.
         
@@ -67,7 +69,9 @@ class Forwarder:
         self.metrics_url = f"{self.server_base}/api/metrics"
 
         if not self.agent_id:
-            raise ValueError("No agent_id available. Please ensure agent is registered.")
+            raise ValueError(
+                "No agent_id available. Please ensure agent is registered."
+            )
 
         self.headers = {
             "Content-Type": "application/json",
@@ -142,8 +146,8 @@ class Forwarder:
         
         # 2. Prepare the payload in the format the server expects
         # (List[LogEntry] model)
-        payload: List[Dict[str, Any]] = []
-        log_ids_in_batch: List[int] = []
+        payload: list[dict[str, Any]] = []
+        log_ids_in_batch: list[int] = []
         
         for log in logs_to_forward:
             payload.append({
@@ -199,8 +203,8 @@ class Forwarder:
             from datetime import datetime, timezone
 
             ts = metrics.get("timestamp")
-            if isinstance(ts, (int, float)):
-                timestamp_iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            if isinstance(ts, int | float):
+                timestamp_iso = datetime.fromtimestamp(ts, tz=UTC).isoformat()
             else:
                 # Assume it's already an ISO string or datetime-like object
                 timestamp_iso = ts
@@ -228,7 +232,10 @@ class Forwarder:
             if response.status_code == 200:
                 print("Successfully forwarded metrics")
             else:
-                print(f"Failed to forward metrics: {response.status_code} {response.text}")
+                print(
+                    f"Failed to forward metrics: "
+                    f"{response.status_code} {response.text}"
+                )
 
         except Exception as e:
             print(f"Error forwarding metrics: {e}")

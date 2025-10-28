@@ -1,21 +1,29 @@
 # aegis-agent/main.py
 
 import argparse
-import sys
 import platform
+import sys
+
 try:
     import distro
 except ImportError:
     distro = None
+import json
+import os
 import threading
 import time
-import os
-import json
+
 import requests
+
+from internal.agent.credentials import (
+    is_registered,
+    load_credentials,
+    store_credentials,
+)
 from internal.agent.id import get_agent_id
-from internal.agent.credentials import store_credentials, load_credentials, is_registered
-from internal.storage.sqlite import Storage
 from internal.forwarder.forwarder import Forwarder
+from internal.storage.sqlite import Storage
+
 
 def main():
     # ... (no changes to main()) ...
@@ -51,8 +59,12 @@ def main():
     run_parser.set_defaults(func=run_agent)
 
     # --- 'register' command ---
-    reg_parser = subparsers.add_parser("register", help="Register the agent with the server")
-    reg_parser.add_argument("--token", required=True, help="Registration invitation token")
+    reg_parser = subparsers.add_parser(
+        "register", help="Register the agent with the server"
+    )
+    reg_parser.add_argument(
+        "--token", required=True, help="Registration invitation token"
+    )
     reg_parser.set_defaults(func=register_agent)
 
     # Parse the arguments
@@ -71,7 +83,10 @@ def run_agent(args):
     """
     # Ensure the agent is registered before running
     if not is_registered():
-        print("ERROR: Agent not registered. Please run the 'register' command first.")
+        print(
+            "ERROR: Agent not registered. "
+            "Please run the 'register' command first."
+        )
         args.storage.close()
         sys.exit(1)
 
@@ -84,8 +99,13 @@ def run_agent(args):
     # --- Initialize Metrics Collector ---
     try:
         from internal.metrics.collector import MetricsCollector
-        metrics_collector = MetricsCollector(interval=60, agent_id=str(args.agent_id))  # Pass agent_id at initialization
-        metrics_thread = metrics_collector.start()  # This will now succeed since we have agent_id
+
+        # Pass agent_id at initialization
+        metrics_collector = MetricsCollector(
+            interval=60, agent_id=str(args.agent_id)
+        )
+        # This will now succeed since we have agent_id
+        metrics_thread = metrics_collector.start()
         print("Metrics collector initialized and started.")
     except ImportError as e:
         print(f"Warning: Could not initialize metrics collector: {e}")
@@ -95,7 +115,11 @@ def run_agent(args):
         metrics_collector = None
     
     # --- MODIFICATION: Initialize Forwarder ---
-    forwarder = Forwarder(storage=args.storage, agent_id=args.agent_id, metrics_collector=metrics_collector)
+    forwarder = Forwarder(
+        storage=args.storage,
+        agent_id=args.agent_id,
+        metrics_collector=metrics_collector,
+    )
     
     collector = None
     if args.os_name == "Linux":
@@ -165,9 +189,11 @@ def run_agent(args):
     finally:
         # Stop all components cleanly
         if metrics_collector:
-            metrics_collector._stop_event.set()  # Signal metrics collector to stop
+            # Signal metrics collector to stop
+            metrics_collector._stop_event.set()
             if metrics_thread:
-                metrics_thread.join(timeout=5)  # Wait up to 5 seconds for metrics thread
+                # Wait up to 5 seconds for metrics thread
+                metrics_thread.join(timeout=5)
         
         forwarder.stop()  # This includes stopping its own metrics collector reference
         args.storage.close()
@@ -199,7 +225,10 @@ def register_agent(args):
         args.storage.close()
         return
 
-    if resp.status_code == 201 or (resp.status_code == 400 and "already registered" in resp.text):
+    already_registered = (
+        resp.status_code == 400 and "already registered" in resp.text
+    )
+    if resp.status_code == 201 or already_registered:
         # Handle both new registration and already registered cases
         print("Agent registered successfully with server.")
         try:

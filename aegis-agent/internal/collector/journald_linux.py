@@ -1,9 +1,11 @@
 # aegis-agent/internal/collector/journald_linux.py
 
-import systemd.journal
+import datetime
 import json
 import time
-import datetime
+
+import systemd.journal
+
 from internal.analysis.rules import check_failed_ssh
 
 # Define the agent's own service name to ignore
@@ -52,8 +54,8 @@ class JournaldCollector:
                 unit = unit.decode('utf-8', 'replace')
 
             if unit == AGENT_SERVICE_NAME:
-                # print(f"[DEBUG] Ignoring self-generated log entry.") # Optional debug line
-                return # Skip processing this entry entirely
+                # Skip processing this entry entirely
+                return
 
             # --- If it's not our own log, proceed as before ---
             entry_dict = {}
@@ -70,7 +72,7 @@ class JournaldCollector:
             if "__REALTIME_TIMESTAMP" in entry:
                 timestamp = entry["__REALTIME_TIMESTAMP"]
             else:
-                timestamp = datetime.datetime.now(datetime.timezone.utc)
+                timestamp = datetime.datetime.now(datetime.UTC)
 
             log_data = {
                 "timestamp": timestamp,

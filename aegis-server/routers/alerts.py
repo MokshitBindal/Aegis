@@ -1,15 +1,16 @@
 # aegis-server/routers/alerts.py
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import List
-import asyncpg
+
+# We need a Pydantic model for alerts
+from pydantic import BaseModel
 
 from internal.auth.jwt import get_current_user
 from internal.storage.postgres import get_db_pool
 from models.models import TokenData
-# We need a Pydantic model for alerts
-from pydantic import BaseModel
-from datetime import datetime
+
 
 class Alert(BaseModel):
     id: int
@@ -20,7 +21,7 @@ class Alert(BaseModel):
 
 router = APIRouter()
 
-@router.get("/alerts", response_model=List[Alert])
+@router.get("/alerts", response_model=list[Alert])
 async def get_alerts(
     request: Request,
     limit: int = 100,

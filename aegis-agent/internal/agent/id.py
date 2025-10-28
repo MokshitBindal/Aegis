@@ -40,7 +40,7 @@ def _generate_new_id() -> str:
     try:
         # We create the file and write the ID
         AGENT_ID_FILE.write_text(new_id)
-    except IOError as e:
+    except OSError as e:
         print(f"CRITICAL ERROR: Could not write agent ID to file: {e}")
         # In a real scenario, we might want to exit here
         # For now, we'll just return the new_id

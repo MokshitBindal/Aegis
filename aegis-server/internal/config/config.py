@@ -1,8 +1,9 @@
 # aegis-server/internal/config/config.py
 
-import tomli # We installed this in Module 7
-from pydantic import BaseModel
 from pathlib import Path
+
+import tomli  # We installed this in Module 7
+from pydantic import BaseModel
 
 CONFIG_FILE_PATH = Path("config.toml")
 

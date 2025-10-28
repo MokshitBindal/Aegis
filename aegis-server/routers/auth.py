@@ -1,13 +1,13 @@
 # aegis-server/routers/auth.py
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
 import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
 
-from models.models import UserCreate, UserInDB, Token
+from internal.auth.jwt import create_access_token  # <--- IMPORT
 from internal.auth.security import get_password_hash, verify_password
 from internal.storage.postgres import get_db_pool
-from internal.auth.jwt import create_access_token # <--- IMPORT
+from models.models import Token, UserCreate, UserInDB
 
 router = APIRouter()
 

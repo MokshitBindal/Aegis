@@ -1,17 +1,17 @@
 # aegis-server/routers/device.py
 
 import secrets
-import uuid
-from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import UTC, datetime, timedelta
+
 import asyncpg
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from internal.auth.jwt import get_current_user
+
 # --- MODIFICATION: Import verify_password ---
 from internal.auth.security import get_password_hash, verify_password
 from internal.storage.postgres import get_db_pool
-from models.models import TokenData, Invitation, DeviceRegister, Device, UserInDB
+from models.models import Device, DeviceRegister, Invitation, TokenData, UserInDB
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ async def create_invitation(
     token_hash = get_password_hash(token)
     
     # 3. Set expiration (e.g., 1 hour from now)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    expires_at = datetime.now(UTC) + timedelta(hours=1)
     
     try:
         async with pool.acquire() as conn:
@@ -65,7 +65,11 @@ async def create_invitation(
         raise HTTPException(status_code=500, detail=f"Failed to create token: {e}")
 
 
-@router.post("/device/register", response_model=Device, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/device/register",
+    response_model=Device,
+    status_code=status.HTTP_201_CREATED,
+)
 async def register_device(
     device_data: DeviceRegister,
     request: Request
@@ -79,50 +83,55 @@ async def register_device(
     token = device_data.token
     
     try:
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                
-                # 1. Find all non-expired invitations
-                sql_find = "SELECT * FROM invitations WHERE expires_at > $1"
-                invites = await conn.fetch(sql_find, datetime.now(timezone.utc))
-                
-                valid_invite = None
-                for invite in invites:
-                    # 2. Verify the token (This is where the fix is)
-                    if verify_password(token, invite['token_hash']):
-                        valid_invite = invite
-                        break
-                        
-                if not valid_invite:
-                    raise HTTPException(status_code=400, detail="Invalid or expired token")
-                
-                # 3. Delete the invitation (single-use)
-                await conn.execute("DELETE FROM invitations WHERE id = $1", valid_invite['id'])
-                
-                # 4. Create the device
-                sql_create = """
-                INSERT INTO devices (user_id, agent_id, hostname, name)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, agent_id, name, hostname, registered_at
-                """
-                new_device_record = await conn.fetchrow(
-                    sql_create,
-                    valid_invite['user_id'],
-                    device_data.agent_id,
-                    device_data.hostname,
-                    device_data.name
+        async with pool.acquire() as conn, conn.transaction():
+            
+            # 1. Find all non-expired invitations
+            sql_find = "SELECT * FROM invitations WHERE expires_at > $1"
+            invites = await conn.fetch(sql_find, datetime.now(UTC))
+            
+            valid_invite = None
+            for invite in invites:
+                # 2. Verify the token (This is where the fix is)
+                if verify_password(token, invite['token_hash']):
+                    valid_invite = invite
+                    break
+                    
+            if not valid_invite:
+                raise HTTPException(
+                    status_code=400, detail="Invalid or expired token"
                 )
+            
+            # 3. Delete the invitation (single-use)
+            await conn.execute(
+                "DELETE FROM invitations WHERE id = $1", valid_invite['id']
+            )
                 
-                return Device.model_validate(dict(new_device_record))
+            # 4. Create the device
+            sql_create = """
+            INSERT INTO devices (user_id, agent_id, hostname, name)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, agent_id, name, hostname, registered_at
+            """
+            new_device_record = await conn.fetchrow(
+                sql_create,
+                valid_invite['user_id'],
+                device_data.agent_id,
+                device_data.hostname,
+                device_data.name
+            )
+                
+            return Device.model_validate(dict(new_device_record))
 
     except asyncpg.exceptions.UniqueViolationError:
-        raise HTTPException(status_code=400, detail="This agent UUID is already registered.")
+        raise HTTPException(
+            status_code=400, detail="This agent UUID is already registered."
+        )
     except Exception as e:
         print(f"Error during device registration: {e}")
         raise HTTPException(status_code=500, detail=f"Registration failed: {e}")
     
 
-@router.get("/devices", response_model=List[Device])
+@router.get("/devices", response_model=list[Device])
 async def list_devices(
     request: Request,
     current_user: TokenData = Depends(get_current_user)

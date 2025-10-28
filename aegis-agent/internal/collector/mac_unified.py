@@ -1,7 +1,8 @@
-import subprocess
-import shlex
-import time
+import contextlib
 import platform
+import shlex
+import subprocess
+import time
 from datetime import datetime
 
 
@@ -24,7 +25,9 @@ class MacUnifiedLogCollector:
 
         cmd = ['log', 'stream', '--style', 'syslog']
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
         except FileNotFoundError:
             print("macOS 'log' command not found. Ensure running on macOS 10.12+.")
             return
@@ -38,13 +41,13 @@ class MacUnifiedLogCollector:
                 if not line:
                     continue
 
-                # Very simple parsing: split timestamp and message when possible
-                # Example syslog style: "Oct 28 10:00:00 hostname process[pid]: message..."
+                # Very simple parsing: split timestamp and message
+                # Example: "Oct 28 10:00:00 hostname process[pid]: msg..."
                 try:
                     parts = line.split(' ', 4)
                     # If we have a recognizable timestamp-like prefix, try to build one
                     if len(parts) >= 5:
-                        timestamp_str = ' '.join(parts[0:3])
+                        ' '.join(parts[0:3])
                         message = parts[4]
                         timestamp = datetime.utcnow()
                     else:
@@ -69,7 +72,5 @@ class MacUnifiedLogCollector:
         except Exception as e:
             print(f"Error reading from 'log stream': {e}")
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 proc.terminate()
-            except Exception:
-                pass

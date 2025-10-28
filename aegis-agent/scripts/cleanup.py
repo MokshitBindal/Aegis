@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import sqlite3
 import os
+import sqlite3
 import sys
+
 
 def check_sudo():
     """Check if script is running with sudo"""

@@ -1,8 +1,9 @@
 """JSON utilities for the server."""
 
 import json
-from datetime import datetime, date
+from datetime import date, datetime
 from uuid import UUID
+
 
 class AegisJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles datetime, date, and UUID objects."""

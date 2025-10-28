@@ -3,13 +3,15 @@ System metrics collector for the Aegis agent.
 Collects CPU, Memory, Disk, and Network metrics.
 """
 
-import psutil
-import time
 import threading
-from typing import Dict, Any
+import time
+from typing import Any
+
+import psutil
+
 
 class MetricsCollector:
-    def __init__(self, interval: int = 60, agent_id: str = None):
+    def __init__(self, interval: int = 60, agent_id: str | None = None):
         """
         Initialize the metrics collector.
         
@@ -23,7 +25,7 @@ class MetricsCollector:
         self._latest_metrics = {}
         self._collection_thread = None  # Thread reference for better control
         
-    def collect_cpu_metrics(self) -> Dict[str, Any]:
+    def collect_cpu_metrics(self) -> dict[str, Any]:
         """Collect CPU-related metrics"""
         # Convert tuple to list for JSON serialization
         load_avg = list(psutil.getloadavg())
@@ -33,7 +35,7 @@ class MetricsCollector:
             "load_avg": load_avg
         }
     
-    def collect_memory_metrics(self) -> Dict[str, Any]:
+    def collect_memory_metrics(self) -> dict[str, Any]:
         """Collect memory-related metrics"""
         mem = psutil.virtual_memory()
         swap = psutil.swap_memory()
@@ -46,7 +48,7 @@ class MetricsCollector:
             "swap_percent": float(swap.percent)
         }
     
-    def collect_disk_metrics(self) -> Dict[str, Any]:
+    def collect_disk_metrics(self) -> dict[str, Any]:
         """Collect disk-related metrics"""
         disk = psutil.disk_usage('/')
         io = psutil.disk_io_counters()
@@ -59,7 +61,7 @@ class MetricsCollector:
             "disk_write_bytes": int(io.write_bytes if io else 0)
         }
     
-    def collect_network_metrics(self) -> Dict[str, Any]:
+    def collect_network_metrics(self) -> dict[str, Any]:
         """Collect network-related metrics"""
         net = psutil.net_io_counters()
         return {
@@ -69,14 +71,14 @@ class MetricsCollector:
             "net_packets_recv": int(net.packets_recv)
         }
 
-    def collect_process_metrics(self) -> Dict[str, Any]:
+    def collect_process_metrics(self) -> dict[str, Any]:
         """Collect process-related metrics"""
         return {
             "process_count": int(len(psutil.pids())),
             "thread_count": int(threading.active_count())
         }
 
-    def collect_all_metrics(self) -> Dict[str, Any]:
+    def collect_all_metrics(self) -> dict[str, Any]:
         """Collect all system metrics"""
         if not self.agent_id:
             raise ValueError("agent_id not set in MetricsCollector")
@@ -109,11 +111,23 @@ class MetricsCollector:
                 self._latest_metrics = {
                     "timestamp": time.time(),
                     "agent_id": str(self.agent_id),
-                    "cpu": {"cpu_percent": 0, "cpu_count": 0, "load_avg": [0, 0, 0]},
-                    "memory": {"memory_total": 0, "memory_available": 0, "memory_percent": 0},
-                    "disk": {"disk_total": 0, "disk_free": 0, "disk_percent": 0},
+                    "cpu": {
+                        "cpu_percent": 0,
+                        "cpu_count": 0,
+                        "load_avg": [0, 0, 0],
+                    },
+                    "memory": {
+                        "memory_total": 0,
+                        "memory_available": 0,
+                        "memory_percent": 0,
+                    },
+                    "disk": {
+                        "disk_total": 0,
+                        "disk_free": 0,
+                        "disk_percent": 0,
+                    },
                     "network": {"net_bytes_sent": 0, "net_bytes_recv": 0},
-                    "process": {"process_count": 0, "thread_count": 0}
+                    "process": {"process_count": 0, "thread_count": 0},
                 }
             return self._latest_metrics
 

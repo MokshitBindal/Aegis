@@ -1,12 +1,13 @@
 # aegis-server/routers/ingest.py
 
 import uuid
-from typing import List
-from fastapi import APIRouter, Header, Depends, HTTPException, Request
-import asyncpg
 
-from models.models import LogEntry
+import asyncpg
+from fastapi import APIRouter, Header, HTTPException, Request
+
 from internal.storage.postgres import get_db_pool
+from models.models import LogEntry
+
 # --- 1. IMPORT THE WEBSOCKET PUSHER ---
 from routers.websocket import push_update_to_user
 
@@ -14,7 +15,7 @@ router = APIRouter()
 
 @router.post("/ingest")
 async def ingest_logs(
-    logs: List[LogEntry],
+    logs: list[LogEntry],
     request: Request,
     x_aegis_agent_id: uuid.UUID = Header(None)
 ):
@@ -24,11 +25,15 @@ async def ingest_logs(
     """
     
     if not x_aegis_agent_id:
-        raise HTTPException(status_code=401, detail="X-Aegis-Agent-ID header is missing")
+        raise HTTPException(
+            status_code=401, detail="X-Aegis-Agent-ID header is missing"
+        )
 
     pool = get_db_pool()
     if not pool:
-        raise HTTPException(status_code=500, detail="Database connection pool not available")
+        raise HTTPException(
+            status_code=500, detail="Database connection pool not available"
+        )
 
     # --- 2. FIND OUT WHICH USER THIS AGENT BELONGS TO ---
     user_id = None

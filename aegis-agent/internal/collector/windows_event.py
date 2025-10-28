@@ -1,5 +1,5 @@
-import time
 import platform
+import time
 from datetime import datetime
 
 
@@ -31,7 +31,10 @@ class WindowsEventCollector:
         while True:
             try:
                 hand = win32evtlog.OpenEventLog(server, logtype)
-                flags = win32evtlog.EVENTLOG_FORWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+                flags = (
+                    win32evtlog.EVENTLOG_FORWARDS_READ
+                    | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+                )
 
                 events = True
                 while events:
@@ -41,7 +44,9 @@ class WindowsEventCollector:
                     for ev_obj in events:
                         try:
                             time_gen = ev_obj.TimeGenerated
-                            timestamp = datetime.fromtimestamp(time.mktime(time_gen.timetuple()))
+                            timestamp = datetime.fromtimestamp(
+                                time.mktime(time_gen.timetuple())
+                            )
                         except Exception:
                             timestamp = datetime.utcnow()
 

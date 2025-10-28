@@ -1,8 +1,9 @@
 # aegis-server/models/models.py
 
-from pydantic import BaseModel, ConfigDict, EmailStr
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 # --- Log Ingestion Models ---
 

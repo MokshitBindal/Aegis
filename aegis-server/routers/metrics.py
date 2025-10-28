@@ -3,15 +3,15 @@ Router for system metrics endpoints.
 Handles metrics ingestion and querying.
 """
 
-from fastapi import APIRouter, Header, HTTPException, Depends
-from typing import List, Optional
+import json
 import uuid
 from datetime import datetime, timedelta
-import json
 
-from models.metrics import SystemMetrics
-from internal.storage.postgres import get_db_pool
+from fastapi import APIRouter, Depends, Header, HTTPException
+
 from internal.auth.jwt import get_current_user
+from internal.storage.postgres import get_db_pool
+from models.metrics import SystemMetrics
 from models.models import TokenData
 from routers.websocket import push_update_to_user
 
@@ -53,7 +53,8 @@ async def ingest_metrics(
             await conn.execute(
                 """
                 INSERT INTO system_metrics 
-                (agent_id, timestamp, cpu_data, memory_data, disk_data, network_data, process_data)
+                (agent_id, timestamp, cpu_data, memory_data, disk_data,
+                 network_data, process_data)
                 VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb)
                 """,
                 str(x_aegis_agent_id),
@@ -85,8 +86,8 @@ async def ingest_metrics(
 async def get_metrics(
     agent_id: uuid.UUID,
     current_user: TokenData = Depends(get_current_user),
-    timespan: Optional[str] = "1h"  # Options: 1h, 24h, 7d, 30d
-) -> List[SystemMetrics]:
+    timespan: str | None = "1h"  # Options: 1h, 24h, 7d, 30d
+) -> list[SystemMetrics]:
     """
     Get metrics for a specific agent within a timespan.
     """

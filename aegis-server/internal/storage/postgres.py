@@ -1,8 +1,9 @@
 # aegis-server/internal/storage/postgres.py
 
+
 import asyncpg
-import asyncio
-from internal.config.config import DB_URL # <--- IMPORT DB_URL
+
+from internal.config.config import DB_URL  # <--- IMPORT DB_URL
 
 # We'll create a global pool variable
 db_pool: asyncpg.Pool = None

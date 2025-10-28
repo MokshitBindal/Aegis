@@ -1,6 +1,8 @@
 """Database initialization and schema management"""
 import asyncpg
+
 from internal.config.config import DB_URL
+
 
 async def init_db():
     """Initialize database schema"""
