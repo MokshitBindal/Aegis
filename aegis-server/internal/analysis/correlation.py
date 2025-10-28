@@ -41,63 +41,76 @@ async def run_analysis_loop():
 
 async def check_potential_brute_force(conn: asyncpg.Connection):
     """
-    Rule: Detects if the same source IP has > 5 failed logins
-    across > 1 distinct agents within the LOOKBACK_MINUTES timeframe.
+    Rule: Detects multiple failed SSH login attempts from the same source IP
+    on a single device (> 3 failures within LOOKBACK_MINUTES).
     """
-    rule_name = "Potential Distributed Brute Force"
+    rule_name = "SSH Failed Login Attempts"
     # Calculate the time window
     start_time = datetime.now(UTC) - timedelta(minutes=LOOKBACK_MINUTES)
 
-    # Note: This query assumes your raw_data JSONB contains a field
-    #       like '_SOURCE_REALTIME_TIMESTAMP' or similar, and potentially
-    #       a source IP field (e.g., from sshd logs).
-    #       This query needs refinement based on actual log structure.
-    #       For now, we simulate finding a source IP field 'source_ip'.
-
-    # This SQL query needs to parse the JSONB `raw_data` to find failed logins
-    # and extract the source IP. This is highly dependent on your log format.
-    # LET'S USE A PLACEHOLDER QUERY focusing on the logic flow.
-    # We'll imagine logs have a 'source_ip' field and 'login_success = false'.
-
-    # -- THIS IS A CONCEPTUAL QUERY - NEEDS ADJUSTMENT FOR REAL DATA --
+    # Extract source IP from MESSAGE field using regex pattern
+    # MESSAGE format: "Failed password for invalid user X from IP port PORT ssh2"
+    # or "Failed password for X from IP port PORT ssh2"
     sql = """
+    WITH failed_logins AS (
+        SELECT
+            raw_data->>'_HOSTNAME' AS hostname,
+            SUBSTRING(raw_data->>'MESSAGE' FROM 'from ([0-9.]+) port') AS source_ip,
+            raw_data->>'MESSAGE' AS message,
+            timestamp
+        FROM logs
+        WHERE
+            timestamp >= $1
+            AND (
+                raw_data->>'MESSAGE' ILIKE '%Failed password%'
+                OR raw_data->>'MESSAGE' ILIKE '%authentication failure%'
+            )
+            AND raw_data->>'MESSAGE' ~ 'from [0-9.]+ port'
+    )
     SELECT
-        raw_data->>'source_ip' AS source_ip,
-        COUNT(DISTINCT agent_id) AS distinct_agents,
-        COUNT(*) AS total_failures
-    FROM logs
-    WHERE
-        timestamp >= $1
-        -- Adjust condition based on actual data
-        AND raw_data->>'login_success' = 'false'
-        AND raw_data->>'source_ip' IS NOT NULL
-    GROUP BY source_ip
-    HAVING
-        COUNT(DISTINCT agent_id) > 1 AND COUNT(*) > 5;
+        fl.hostname,
+        fl.source_ip,
+        d.agent_id,
+        COUNT(*) AS failure_count,
+        MIN(fl.timestamp) AS first_attempt,
+        MAX(fl.timestamp) AS last_attempt,
+        array_agg(DISTINCT SUBSTRING(fl.message, 1, 100)) AS sample_messages
+    FROM failed_logins fl
+    LEFT JOIN devices d ON d.hostname = fl.hostname
+    WHERE fl.source_ip IS NOT NULL
+    GROUP BY fl.hostname, fl.source_ip, d.agent_id
+    HAVING COUNT(*) >= 3;
     """
 
     try:
-        suspicious_ips = await conn.fetch(sql, start_time)
+        suspicious_attempts = await conn.fetch(sql, start_time)
 
-        for record in suspicious_ips:
+        for record in suspicious_attempts:
+            hostname = record['hostname']
             ip = record['source_ip']
-            agents_count = record['distinct_agents']
-            failures = record['total_failures']
+            agent_id = record['agent_id']
+            failures = record['failure_count']
+            first_attempt = record['first_attempt']
+            last_attempt = record['last_attempt']
 
-            print("\n" + "="*20)
+            print("\n" + "="*50)
             print(f">>> SERVER ALERT: {rule_name}")
+            print(f">>> Device: {hostname} (agent_id: {agent_id})")
             print(f">>> Source IP: {ip}")
-            print(f">>> Failed logins: {failures} across {agents_count} agents")
-            print("="*20 + "\n")
+            print(f">>> Failed attempts: {failures}")
+            print(f">>> Time range: {first_attempt} to {last_attempt}")
+            print("="*50 + "\n")
 
-            # --- Save the Alert to the DB ---
+            # --- Save the Alert to the DB with agent_id ---
             alert_details = {
+                "hostname": hostname,
                 "source_ip": ip,
-                "failed_logins": failures,
-                "distinct_agents": agents_count,
+                "failed_attempts": failures,
+                "first_attempt": first_attempt.isoformat() if first_attempt else None,
+                "last_attempt": last_attempt.isoformat() if last_attempt else None,
                 "timeframe_minutes": LOOKBACK_MINUTES
             }
-            await save_alert(conn, rule_name, alert_details, "medium")
+            await save_alert(conn, rule_name, alert_details, "high", agent_id)
 
     except Exception as e:
         print(f"Error during brute force check: {e}")
@@ -105,18 +118,18 @@ async def check_potential_brute_force(conn: asyncpg.Connection):
 
 
 async def save_alert(
-    conn: asyncpg.Connection, rule_name: str, details: dict, severity: str
+    conn: asyncpg.Connection, rule_name: str, details: dict, severity: str, agent_id=None
 ):
     """
     Saves a generated alert to the database and pushes a notification.
     """
     sql = """
-    INSERT INTO alerts (rule_name, details, severity)
-    VALUES ($1, $2, $3)
+    INSERT INTO alerts (rule_name, details, severity, agent_id)
+    VALUES ($1, $2, $3, $4)
     RETURNING id, created_at
     """
     try:
-        result = await conn.fetchrow(sql, rule_name, json.dumps(details), severity)
+        result = await conn.fetchrow(sql, rule_name, json.dumps(details), severity, agent_id)
 
         # --- Push notification via WebSocket ---
         # We need to notify ALL users who might be affected.
@@ -125,7 +138,7 @@ async def save_alert(
         # (simpler for now). We don't have user roles yet, so let's skip
         # targeted push for now.
 
-        print(f"Alert saved to DB (ID: {result['id']})")
+        print(f"Alert saved to DB (ID: {result['id']}, agent_id: {agent_id})")
         
         # --- Placeholder for targeted WebSocket push ---
         # Find user_ids related to this alert (e.g., owners of affected agents)

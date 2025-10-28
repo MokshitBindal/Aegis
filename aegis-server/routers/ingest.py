@@ -1,5 +1,6 @@
 # aegis-server/routers/ingest.py
 
+import json
 import uuid
 
 import asyncpg
@@ -67,6 +68,7 @@ async def ingest_logs(
     # --- 4. HIGH-SPEED BULK INSERT ---
     try:
         async with pool.acquire() as conn:
+            # Use copy_records_to_table for bulk insert (fast)
             await conn.copy_records_to_table(
                 'logs',
                 records=records_to_insert,
@@ -80,9 +82,32 @@ async def ingest_logs(
         print(f"An unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
-    # --- 5. PUSH REAL-TIME UPDATE ---
-    # If the insert was successful, tell the user's dashboard
+    # --- 5. PUSH REAL-TIME LOG UPDATES ---
+    # Broadcast each log to the user's WebSocket
     if user_id:
+        for log in logs:
+            # Parse the raw_json string to a dict
+            try:
+                raw_data = json.loads(log.raw_json) if isinstance(log.raw_json, str) else log.raw_json
+            except (json.JSONDecodeError, TypeError):
+                raw_data = {}
+                
+            message = raw_data.get("MESSAGE", "")
+            await push_update_to_user(user_id, {
+                "type": "new_log",
+                "payload": {
+                    "id": hash(f"{log.timestamp}{log.hostname}{message}"),  # Generate a pseudo-ID
+                    "agent_id": str(x_aegis_agent_id),
+                    "timestamp": log.timestamp.isoformat(),
+                    "hostname": log.hostname,
+                    "message": message,
+                    "severity": raw_data.get("PRIORITY", "6"),  # Default to info
+                    "facility": raw_data.get("SYSLOG_FACILITY", "1"),
+                    "process_name": raw_data.get("SYSLOG_IDENTIFIER", raw_data.get("_COMM", "")),
+                }
+            })
+        
+        # Also send agent status update
         await push_update_to_user(user_id, {
             "type": "agent_status",
             "payload": {

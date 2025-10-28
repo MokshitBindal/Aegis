@@ -18,7 +18,7 @@ router = APIRouter()
 # Define the allowed timeframes
 Timeframe = Literal["1h", "6h", "24h", "7d"]
 
-@router.get("/logs")
+@router.get("/query/logs")
 async def get_logs_for_agent(
     request: Request,
     agent_id: uuid.UUID = Query(...), # Require an agent_id
@@ -63,7 +63,14 @@ async def get_logs_for_agent(
             # --- If check passes, fetch the logs ---
             # This query is fast because 'logs' is a hypertable!
             sql_logs = """
-            SELECT timestamp, hostname, raw_data->>'MESSAGE' as message, raw_data
+            SELECT 
+                timestamp, 
+                agent_id,
+                hostname, 
+                raw_data->>'MESSAGE' as message,
+                COALESCE(raw_data->>'PRIORITY', '6') as severity,
+                COALESCE(raw_data->>'SYSLOG_FACILITY', '1') as facility,
+                COALESCE(raw_data->>'SYSLOG_IDENTIFIER', raw_data->>'_COMM', '') as process_name
             FROM logs
             WHERE agent_id = $1 AND timestamp >= $2
             ORDER BY timestamp DESC
@@ -72,7 +79,20 @@ async def get_logs_for_agent(
             log_records = await conn.fetch(sql_logs, agent_id, start_time, limit)
             
             # Convert records to a list of dicts for JSON response
-            logs = [dict(record) for record in log_records]
+            logs = []
+            for idx, record in enumerate(log_records):
+                # Generate a pseudo-ID using hash of timestamp + hostname + message
+                pseudo_id = hash(f"{record['timestamp']}{record['hostname']}{record['message']}")
+                logs.append({
+                    "id": pseudo_id,
+                    "agent_id": str(record['agent_id']),
+                    "timestamp": record['timestamp'].isoformat(),
+                    "hostname": record['hostname'],
+                    "message": record['message'] or "",
+                    "severity": record['severity'],
+                    "facility": record['facility'],
+                    "process_name": record['process_name'],
+                })
             return logs
             
     except Exception as e:
