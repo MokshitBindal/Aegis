@@ -1,11 +1,11 @@
 // src/pages/DashboardPage.tsx
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { Link } from "react-router-dom"; // <--- 1. IMPORT LINK
+import { Link } from "react-router-dom";
 
-// ... (interface Device and DeviceStatusMap are unchanged) ...
 interface Device {
   id: number;
   agent_id: string;
@@ -17,6 +17,7 @@ type DeviceStatusMap = Record<string, "online" | "offline">;
 
 export default function DashboardPage() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [statuses, setStatuses] = useState<DeviceStatusMap>({});
   const [loading, setLoading] = useState(true);
@@ -55,12 +56,17 @@ export default function DashboardPage() {
     fetchDevices();
   }, []);
 
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
   return (
     <div className="container p-8 mx-auto">
       <header className="flex items-center justify-between pb-4 border-b border-gray-700">
         <h1 className="text-3xl font-bold">Aegis Dashboard</h1>
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="px-4 py-2 font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
         >
           Logout
