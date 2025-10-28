@@ -5,8 +5,9 @@ venv/
 *.db
 *.db-journal
 
-# Local agent ID
+# Local agent files
 agent.id
+agent.credentials
 
 # Python cache
 __pycache__/

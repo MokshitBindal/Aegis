@@ -23,10 +23,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Persist token changes to localStorage
+    console.log('AuthContext useEffect: Token changed to:', token);
     if (token) {
-      localStorage.setItem("aegis_token", token);
+      console.log('AuthContext useEffect: Setting token in localStorage');
+      localStorage.setItem('aegis_token', token);
     } else {
-      localStorage.removeItem("aegis_token");
+      console.log('AuthContext useEffect: Removing token from localStorage');
+      localStorage.removeItem('aegis_token');
     }
   }, [token]);
 
