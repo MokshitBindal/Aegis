@@ -7,6 +7,7 @@ import DeviceDetailsPage from "./pages/DeviceDetailsPage";
 import AlertsPage from "./pages/AlertsPage";
 import MetricsPage from "./pages/MetricsPage";
 import LogsPage from "./pages/LogsPage";
+import CommandsPage from "./pages/CommandsPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -76,6 +77,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LogsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/commands"
+        element={
+          <ProtectedRoute>
+            <CommandsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/commands/:agentId"
+        element={
+          <ProtectedRoute>
+            <CommandsPage />
           </ProtectedRoute>
         }
       />

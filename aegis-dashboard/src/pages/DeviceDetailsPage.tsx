@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../lib/api";
+import DeviceCommands from "../components/DeviceCommands";
 
 // This is the shape of the log data from our new endpoint
 interface Log {
@@ -100,6 +101,13 @@ export default function DeviceDetailsPage() {
           </button>
         ))}
       </div>
+
+      {/* Command History Section */}
+      {agentId && (
+        <div className="mb-6">
+          <DeviceCommands agentId={agentId} />
+        </div>
+      )}
 
       {/* Log Content Area - This will fill the remaining height */}
       <div className="flex space-x-4 flex-1 min-h-0">
