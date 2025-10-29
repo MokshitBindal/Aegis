@@ -14,6 +14,7 @@ from routers import (
     agent_alerts,
     alerts,
     auth,
+    commands,
     device,
     incidents,
     ingest,
@@ -86,8 +87,7 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(metrics.router, prefix="/api")
 app.include_router(agent_alerts.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
-app.include_router(alerts.router, prefix="/api")
-app.include_router(metrics.router, prefix="/api")
+app.include_router(commands.router, prefix="/api")
 
 @app.get("/")
 async def root():

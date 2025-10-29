@@ -20,7 +20,7 @@ class Forwarder:
     SQLite DB to the central server.
     """
     
-    def __init__(self, storage, agent_id: str | None = None, metrics_collector=None, analysis_engine=None):
+    def __init__(self, storage, agent_id: str | None = None, metrics_collector=None, analysis_engine=None, command_collector=None):
         """
         Initializes the Forwarder.
         
@@ -29,9 +29,11 @@ class Forwarder:
             agent_id (str): The agent's unique UUID.
             metrics_collector (MetricsCollector): The metrics collector instance.
             analysis_engine (AnalysisEngine): The analysis engine instance.
+            command_collector (CommandCollector): The command collector instance.
         """
         self.storage = storage
         self.analysis_engine = analysis_engine
+        self.command_collector = command_collector
         # Try to load server URL and agent credentials from secure storage
         try:
             from internal.agent.credentials import load_credentials
@@ -123,6 +125,9 @@ class Forwarder:
                 # Forward alerts if analysis engine is available
                 if self.analysis_engine:
                     self.forward_alerts()
+                
+                # Forward commands if available
+                self.forward_commands()
             except Exception as e:
                 print(f"Error in forwarder run loop: {e}")
 
@@ -287,3 +292,51 @@ class Forwarder:
 
         except Exception as e:
             print(f"Error forwarding alerts: {e}")
+    
+    def forward_commands(self):
+        """
+        Forwards pending commands to the server.
+        """
+        try:
+            # Get pending commands from storage
+            commands = self.storage.get_pending_commands(batch_size=50)
+            
+            if not commands:
+                return
+            
+            print(f"Found {len(commands)} commands to forward")
+            
+            # Prepare payload
+            payload = []
+            command_ids = []
+            
+            for cmd in commands:
+                payload.append({
+                    "command": cmd.get("command"),
+                    "user": cmd.get("user"),
+                    "timestamp": cmd.get("timestamp"),
+                    "shell": cmd.get("shell"),
+                    "source": cmd.get("source"),
+                    "working_directory": cmd.get("working_directory"),
+                    "exit_code": cmd.get("exit_code"),
+                    "agent_id": cmd.get("agent_id"),
+                })
+                command_ids.append(cmd["id"])
+            
+            # Send to server (we'll create this endpoint next)
+            commands_url = self.server_url.replace("/ingest", "/commands")
+            response = requests.post(
+                commands_url, json=payload, headers=self.headers, timeout=10
+            )
+            
+            if response.status_code == 200:
+                print(f"Successfully forwarded {len(commands)} commands")
+                # Mark as forwarded
+                self.storage.mark_commands_forwarded(command_ids)
+            else:
+                print(
+                    f"Failed to forward commands: "
+                    f"{response.status_code} {response.text}"
+                )
+        except Exception as e:
+            print(f"Error forwarding commands: {e}")

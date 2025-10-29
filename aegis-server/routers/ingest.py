@@ -1,6 +1,7 @@
 # aegis-server/routers/ingest.py
 
 import json
+import re
 import uuid
 
 import asyncpg
@@ -56,24 +57,56 @@ async def ingest_logs(
     # --- 3. DATA PREPARATION ---
     records_to_insert = []
     for log in logs:
+        # Aggressive sanitization to remove null bytes and control characters
+        # that PostgreSQL's TEXT type cannot handle
+        try:
+            sanitized_raw_json = log.raw_json
+            
+            # Method 1: Remove common null byte representations
+            sanitized_raw_json = sanitized_raw_json.replace('\u0000', '')
+            sanitized_raw_json = sanitized_raw_json.replace('\x00', '')
+            
+            # Method 2: Encode to bytes and filter out null bytes
+            sanitized_bytes = sanitized_raw_json.encode('utf-8', errors='ignore')
+            sanitized_bytes = sanitized_bytes.replace(b'\x00', b'')
+            sanitized_raw_json = sanitized_bytes.decode('utf-8', errors='ignore')
+            
+            # Method 3: Remove control characters (except tab, newline, carriage return)
+            sanitized_raw_json = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', sanitized_raw_json)
+            
+        except Exception as e:
+            # If sanitization fails, use empty JSON
+            print(f"Warning: Failed to sanitize log, using empty JSON: {e}")
+            sanitized_raw_json = '{}'
+        
         records_to_insert.append(
             (
                 log.timestamp,
                 x_aegis_agent_id, 
                 log.hostname,
-                log.raw_json
+                sanitized_raw_json
             )
         )
 
     # --- 4. HIGH-SPEED BULK INSERT ---
     try:
         async with pool.acquire() as conn:
-            # Use copy_records_to_table for bulk insert (fast)
-            await conn.copy_records_to_table(
-                'logs',
-                records=records_to_insert,
-                columns=('timestamp', 'agent_id', 'hostname', 'raw_data')
-            )
+            # Use executemany for bulk insert with proper parameterization
+            # This is more forgiving of special characters than copy_records_to_table
+            sql = """
+                INSERT INTO logs (timestamp, agent_id, hostname, raw_data)
+                VALUES ($1, $2, $3, $4)
+            """
+            
+            # Use a transaction for better performance
+            async with conn.transaction():
+                for record in records_to_insert:
+                    try:
+                        await conn.execute(sql, *record)
+                    except Exception as e:
+                        # Skip problematic records but continue processing
+                        print(f"Warning: Skipped log entry due to error: {e}")
+                        continue
             
     except asyncpg.exceptions.PostgresError as e:
         print(f"Database error during log ingestion: {e}")

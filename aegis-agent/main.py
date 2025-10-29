@@ -129,12 +129,32 @@ def run_agent(args):
         print(f"Error starting metrics collector: {e}")
         metrics_collector = None
     
+    # --- Initialize Command Collector ---
+    command_collector = None
+    command_thread = None
+    try:
+        from internal.collector.command_collector import CommandCollector
+
+        command_collector = CommandCollector(
+            storage=args.storage, 
+            analysis_engine=analysis_engine,
+            agent_id=str(args.agent_id)
+        )
+        print("Command collector initialized.")
+    except ImportError as e:
+        print(f"Warning: Could not initialize command collector: {e}")
+        command_collector = None
+    except Exception as e:
+        print(f"Error initializing command collector: {e}")
+        command_collector = None
+    
     # --- MODIFICATION: Initialize Forwarder ---
     forwarder = Forwarder(
         storage=args.storage,
         agent_id=args.agent_id,
         metrics_collector=metrics_collector,
         analysis_engine=analysis_engine,
+        command_collector=command_collector,
     )
     
     collector = None
@@ -193,6 +213,24 @@ def run_agent(args):
         )
         collector_thread.start()
         print(f"{collector.__class__.__name__} thread started.")
+    
+    # --- Start Command Collector Thread ---
+    if command_collector:
+        def run_command_collection():
+            """Command collection loop - runs every 30 seconds."""
+            while True:
+                try:
+                    command_collector.collect_commands()
+                except Exception as e:
+                    print(f"Error in command collection: {e}")
+                time.sleep(30)  # Collect commands every 30 seconds
+        
+        command_thread = threading.Thread(
+            target=run_command_collection,
+            daemon=True
+        )
+        command_thread.start()
+        print("Command collector thread started.")
 
     # --- MODIFICATION: Start Forwarder ---
     forwarder.start()

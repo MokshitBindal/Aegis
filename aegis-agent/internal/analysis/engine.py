@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from internal.analysis.rules import check_failed_ssh
+from internal.analysis.command_rules import analyze_command
 
 
 class AnalysisEngine:
@@ -278,6 +279,32 @@ class AnalysisEngine:
         last_alert_time = self.alert_cooldown[alert_key]
         return (current_time - last_alert_time) < self.cooldown_period
 
+    def _should_skip_alert(self, alert_key: tuple) -> bool:
+        """
+        Check if an alert should be skipped due to cooldown.
+        
+        Args:
+            alert_key: Tuple identifying the alert type and target
+            
+        Returns:
+            True if should skip (in cooldown), False otherwise
+        """
+        current_time = time.time()
+        
+        if alert_key not in self.alert_cooldown:
+            # Not in cooldown, update timestamp and allow alert
+            self.alert_cooldown[alert_key] = current_time
+            return False
+        
+        last_alert_time = self.alert_cooldown[alert_key]
+        if (current_time - last_alert_time) < self.cooldown_period:
+            # Still in cooldown, skip alert
+            return True
+        
+        # Cooldown expired, update timestamp and allow alert
+        self.alert_cooldown[alert_key] = current_time
+        return False
+
     def _store_alert(self, alert: dict):
         """
         Store alert in SQLite database.
@@ -314,3 +341,34 @@ class AnalysisEngine:
             self.storage.mark_alerts_forwarded(alert_ids)
         except Exception as e:
             print(f"Failed to mark alerts as forwarded: {e}")
+    
+    def analyze_command(self, command_data: dict):
+        """
+        Analyze a terminal command for suspicious patterns.
+        
+        Args:
+            command_data: Command dictionary from CommandCollector
+        """
+        # Run command analysis rules
+        alert = analyze_command(command_data)
+        
+        if alert:
+            # Check cooldown to avoid duplicate alerts for same command
+            command = command_data.get('command', '')
+            alert_key = (alert['rule_name'], command[:50])  # Use first 50 chars as key
+            
+            if not self._should_skip_alert(alert_key):
+                # Add agent_id and timestamp
+                alert['timestamp'] = datetime.now().isoformat()
+                alert['agent_id'] = self.agent_id
+                
+                # Store the alert
+                self.storage.store_alert(alert)
+                
+                # Print concise alert (not full banner)
+                severity_emoji = "🔴" if alert['severity'] == 'critical' else "🟠" if alert['severity'] == 'high' else "🟡"
+                print(f"{severity_emoji} [{alert['severity'].upper()}] {alert['rule_name']}: {command[:60]}")
+                
+                # Update cooldown
+                self.alert_cooldown[alert_key] = time.time()
+

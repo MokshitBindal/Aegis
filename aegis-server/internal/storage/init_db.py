@@ -82,6 +82,29 @@ async def init_db():
         CREATE INDEX IF NOT EXISTS idx_incidents_created ON incidents(created_at DESC);
         ''')
         
+        # Create commands table for terminal command logging
+        await conn.execute('''
+        CREATE TABLE IF NOT EXISTS commands (
+            id BIGSERIAL PRIMARY KEY,
+            command TEXT NOT NULL,
+            user_name VARCHAR(255) NOT NULL,
+            timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+            shell VARCHAR(50),
+            source VARCHAR(255),
+            working_directory TEXT,
+            exit_code INTEGER,
+            agent_id UUID REFERENCES devices(agent_id) ON DELETE CASCADE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        ''')
+        
+        # Create indexes for commands
+        await conn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_commands_agent_time ON commands(agent_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_commands_user ON commands(user_name);
+        CREATE INDEX IF NOT EXISTS idx_commands_created ON commands(created_at DESC);
+        ''')
+        
         await conn.close()
         print("Database schema initialized successfully.")
         
