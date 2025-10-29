@@ -11,16 +11,20 @@ import psutil
 
 
 class MetricsCollector:
-    def __init__(self, interval: int = 60, agent_id: str | None = None):
+    def __init__(
+        self, interval: int = 60, agent_id: str | None = None, analysis_engine=None
+    ):
         """
         Initialize the metrics collector.
         
         Args:
             interval: Collection interval in seconds (default: 60)
             agent_id: The agent's unique identifier
+            analysis_engine: Optional AnalysisEngine instance for anomaly detection
         """
         self.interval = interval
         self.agent_id = str(agent_id) if agent_id else None
+        self.analysis_engine = analysis_engine
         self._stop_event = threading.Event()
         self._latest_metrics = {}
         self._collection_thread = None  # Thread reference for better control
@@ -138,9 +142,24 @@ class MetricsCollector:
             try:
                 metrics = self.collect_all_metrics()
                 if metrics and 'cpu' in metrics:
-                    print(f"Collected metrics: CPU {metrics['cpu']['cpu_percent']}%, "
-                          f"Memory {metrics['memory']['memory_percent']}%, "
-                          f"Disk {metrics['disk']['disk_percent']}%")
+                    print(
+                        f"Collected metrics: CPU {metrics['cpu']['cpu_percent']}%, "
+                        f"Memory {metrics['memory']['memory_percent']}%, "
+                        f"Disk {metrics['disk']['disk_percent']}%"
+                    )
+                    
+                    # Run analysis engine if available
+                    if self.analysis_engine:
+                        # Flatten metrics for analysis
+                        analysis_data = {
+                            "cpu_percent": metrics['cpu']['cpu_percent'],
+                            "memory_percent": metrics['memory']['memory_percent'],
+                            "disk_percent": metrics['disk']['disk_percent'],
+                            "timestamp": metrics['timestamp'],
+                        }
+                        alerts = self.analysis_engine.analyze_metrics(analysis_data)
+                        for alert in alerts:
+                            print(f"[ALERT GENERATED] {alert['rule_name']}")
                 else:
                     print("Failed to collect complete metrics")
             except Exception as e:

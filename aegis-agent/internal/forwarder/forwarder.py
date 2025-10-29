@@ -20,7 +20,7 @@ class Forwarder:
     SQLite DB to the central server.
     """
     
-    def __init__(self, storage, agent_id: str | None = None, metrics_collector=None):
+    def __init__(self, storage, agent_id: str | None = None, metrics_collector=None, analysis_engine=None):
         """
         Initializes the Forwarder.
         
@@ -28,9 +28,10 @@ class Forwarder:
             storage (Storage): The Storage instance for DB access.
             agent_id (str): The agent's unique UUID.
             metrics_collector (MetricsCollector): The metrics collector instance.
+            analysis_engine (AnalysisEngine): The analysis engine instance.
         """
         self.storage = storage
-        # Try to load server URL and agent credentials from secure storage
+        self.analysis_engine = analysis_engine
         # Try to load server URL and agent credentials from secure storage
         try:
             from internal.agent.credentials import load_credentials
@@ -38,11 +39,6 @@ class Forwarder:
             creds = load_credentials()
             if not agent_id:
                 agent_id = str(get_agent_id())
-        except Exception:
-            creds = None
-        try:
-            from internal.agent.credentials import load_credentials
-            creds = load_credentials()
         except Exception:
             creds = None
 
@@ -67,6 +63,7 @@ class Forwarder:
         self.server_base = self.server_url.replace("/api/ingest", "")
         self.ingest_url = f"{self.server_base}/api/ingest"
         self.metrics_url = f"{self.server_base}/api/metrics"
+        self.alerts_url = f"{self.server_base}/api/agent-alerts"
 
         if not self.agent_id:
             raise ValueError(
@@ -122,6 +119,10 @@ class Forwarder:
                 # Forward metrics if available
                 if self.metrics_collector:
                     self.forward_metrics()
+                
+                # Forward alerts if analysis engine is available
+                if self.analysis_engine:
+                    self.forward_alerts()
             except Exception as e:
                 print(f"Error in forwarder run loop: {e}")
 
@@ -239,3 +240,50 @@ class Forwarder:
 
         except Exception as e:
             print(f"Error forwarding metrics: {e}")
+
+    def forward_alerts(self):
+        """
+        Forwards agent-generated alerts to the server
+        """
+        if not self.analysis_engine:
+            return
+
+        try:
+            # Get pending alerts from storage
+            alerts = self.analysis_engine.get_pending_alerts()
+            if not alerts:
+                return
+
+            print(f"Found {len(alerts)} alerts to forward")
+
+            # Prepare payload - list of alerts
+            payload = []
+            alert_ids = []
+
+            for alert in alerts:
+                payload.append({
+                    "rule_name": alert.get("rule_name"),
+                    "severity": alert.get("severity"),
+                    "details": alert.get("details", {}),
+                    "timestamp": alert.get("timestamp"),
+                    "agent_id": alert.get("agent_id"),
+                })
+                alert_ids.append(alert["id"])
+
+            # Send to server
+            response = requests.post(
+                self.alerts_url, json=payload, headers=self.headers, timeout=10
+            )
+
+            if response.status_code == 200:
+                print(f"Successfully forwarded {len(alerts)} alerts")
+                # Mark as forwarded in local DB
+                self.analysis_engine.mark_alerts_forwarded(alert_ids)
+            else:
+                print(
+                    f"Failed to forward alerts: "
+                    f"{response.status_code} {response.text}"
+                )
+
+        except Exception as e:
+            print(f"Error forwarding alerts: {e}")

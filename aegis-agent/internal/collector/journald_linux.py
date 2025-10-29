@@ -6,16 +6,15 @@ import time
 
 import systemd.journal
 
-from internal.analysis.rules import check_failed_ssh
-
 # Define the agent's own service name to ignore
 AGENT_SERVICE_NAME = "aegis-agent.service"
 
-class JournaldCollector:
 
-    def __init__(self, storage):
+class JournaldCollector:
+    def __init__(self, storage, analysis_engine=None):
         print("JournaldCollector initialized.")
         self.storage = storage
+        self.analysis_engine = analysis_engine
         self.reader = None
 
     def run(self):
@@ -78,19 +77,19 @@ class JournaldCollector:
                 "timestamp": timestamp,
                 "hostname": hostname,
                 "message": message,
-                "raw_json": json.dumps(entry_dict, default=str)
+                "raw_json": json.dumps(entry_dict, default=str),
+                "raw_data": entry_dict,  # Add parsed dict for analysis
             }
 
             self.storage.write_log(log_data)
             # Shorten the print message to reduce log spam further
             print(f"[Stored] {hostname}: {message[:60]}...")
 
-            # Run Local Analysis Rules
-            if check_failed_ssh(message):
-                print("\n" + "="*20)
-                print(">>> LOCAL ALERT: Failed SSH Login Detected!")
-                print(f">>> Details: {message}")
-                print("="*20 + "\n")
+            # Run analysis engine if available
+            if self.analysis_engine:
+                alerts = self.analysis_engine.analyze_log(log_data)
+                for alert in alerts:
+                    print(f"[ALERT GENERATED] {alert['rule_name']}")
 
         except Exception as e:
             print(f"Error processing entry: {e}")

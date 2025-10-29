@@ -33,9 +33,9 @@ class Storage:
 
     def _create_schema(self):
         """
-        Creates the 'logs' table if it doesn't already exist.
+        Creates the 'logs' and 'alerts' tables if they don't already exist.
         """
-        schema = """
+        logs_schema = """
         CREATE TABLE IF NOT EXISTS logs (
             id          INTEGER PRIMARY KEY,
             timestamp   TEXT NOT NULL,
@@ -45,9 +45,23 @@ class Storage:
             forwarded   INTEGER DEFAULT 0
         );
         """
+        
+        alerts_schema = """
+        CREATE TABLE IF NOT EXISTS alerts (
+            id          INTEGER PRIMARY KEY,
+            rule_name   TEXT NOT NULL,
+            severity    TEXT NOT NULL,
+            details     TEXT NOT NULL,
+            timestamp   TEXT NOT NULL,
+            agent_id    TEXT NOT NULL,
+            forwarded   INTEGER DEFAULT 0
+        );
+        """
+        
         try:
             with self.lock:
-                self.conn.execute(schema)
+                self.conn.execute(logs_schema)
+                self.conn.execute(alerts_schema)
                 self.conn.commit()
             print("Database schema verified.")
         except Exception as e:
@@ -129,6 +143,83 @@ class Storage:
                 self.conn.commit()
         except Exception as e:
             print(f"Error marking logs as forwarded: {e}")
+
+    # --- ALERT STORAGE METHODS ---
+    
+    def store_alert(self, alert: dict):
+        """
+        Stores a generated alert in the database.
+        
+        Args:
+            alert (dict): Alert dictionary with rule_name, severity, details, etc.
+        """
+        sql = """
+        INSERT INTO alerts (rule_name, severity, details, timestamp, agent_id)
+        VALUES (?, ?, ?, ?, ?)
+        """
+        
+        params = (
+            alert.get('rule_name', 'Unknown'),
+            alert.get('severity', 'low'),
+            json.dumps(alert.get('details', {})),
+            alert.get('timestamp', datetime.now().isoformat()),
+            alert.get('agent_id', '')
+        )
+        
+        try:
+            with self.lock:
+                self.conn.execute(sql, params)
+                self.conn.commit()
+        except Exception as e:
+            print(f"Error writing alert to SQLite: {e}")
+    
+    def get_pending_alerts(self, batch_size: int = 50) -> list[dict[str, Any]]:
+        """
+        Retrieves alerts that haven't been forwarded to the server yet.
+        
+        Args:
+            batch_size (int): Maximum number of alerts to retrieve.
+            
+        Returns:
+            List[Dict[str, Any]]: List of alert records as dictionaries.
+        """
+        sql = "SELECT * FROM alerts WHERE forwarded = 0 LIMIT ?"
+        
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(sql, (batch_size,))
+                rows = [dict(row) for row in cursor.fetchall()]
+                # Parse the details JSON string back to dict
+                for row in rows:
+                    try:
+                        row['details'] = json.loads(row['details'])
+                    except (json.JSONDecodeError, KeyError):
+                        row['details'] = {}
+                return rows
+        except Exception as e:
+            print(f"Error reading pending alerts: {e}")
+            return []
+    
+    def mark_alerts_forwarded(self, alert_ids: list[int]):
+        """
+        Marks alerts as forwarded to the server.
+        
+        Args:
+            alert_ids (List[int]): List of alert primary keys to mark.
+        """
+        if not alert_ids:
+            return
+            
+        placeholders = ', '.join('?' * len(alert_ids))
+        sql = f"UPDATE alerts SET forwarded = 1 WHERE id IN ({placeholders})"
+        
+        try:
+            with self.lock:
+                self.conn.execute(sql, alert_ids)
+                self.conn.commit()
+        except Exception as e:
+            print(f"Error marking alerts as forwarded: {e}")
 
     def close(self):
         """

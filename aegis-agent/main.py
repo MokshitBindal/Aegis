@@ -96,13 +96,28 @@ def run_agent(args):
     metrics_thread = None
     metrics_collector = None
     
+    # --- Initialize Analysis Engine ---
+    try:
+        from internal.analysis.engine import AnalysisEngine
+
+        analysis_engine = AnalysisEngine(
+            storage=args.storage, agent_id=str(args.agent_id)
+        )
+        print("Analysis engine initialized.")
+    except ImportError as e:
+        print(f"Warning: Could not initialize analysis engine: {e}")
+        analysis_engine = None
+    except Exception as e:
+        print(f"Error starting analysis engine: {e}")
+        analysis_engine = None
+    
     # --- Initialize Metrics Collector ---
     try:
         from internal.metrics.collector import MetricsCollector
 
         # Pass agent_id at initialization
         metrics_collector = MetricsCollector(
-            interval=60, agent_id=str(args.agent_id)
+            interval=60, agent_id=str(args.agent_id), analysis_engine=analysis_engine
         )
         # This will now succeed since we have agent_id
         metrics_thread = metrics_collector.start()
@@ -119,6 +134,7 @@ def run_agent(args):
         storage=args.storage,
         agent_id=args.agent_id,
         metrics_collector=metrics_collector,
+        analysis_engine=analysis_engine,
     )
     
     collector = None
@@ -127,7 +143,10 @@ def run_agent(args):
         print(f"Linux OS detected. Distribution: {distro_name}")
         try:
             from internal.collector.journald_linux import JournaldCollector
-            collector = JournaldCollector(storage=args.storage)
+
+            collector = JournaldCollector(
+                storage=args.storage, analysis_engine=analysis_engine
+            )
         except ImportError:
             print("Failed to import JournaldCollector. Is 'systemd-python' installed?")
             args.storage.close()

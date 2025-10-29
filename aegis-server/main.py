@@ -8,21 +8,36 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # --- IMPORT THE ANALYSIS LOOP ---
 from internal.analysis.correlation import run_analysis_loop
+from internal.analysis.incident_aggregator import run_incident_aggregation_loop
 from internal.storage.postgres import close_db_pool, init_db_pool
-from routers import alerts, auth, device, ingest, metrics, query, websocket
+from routers import (
+    agent_alerts,
+    alerts,
+    auth,
+    device,
+    incidents,
+    ingest,
+    metrics,
+    query,
+    websocket,
+)
 
-# Store the background task so we can cancel it on shutdown
+# Store the background tasks so we can cancel them on shutdown
 background_task = None
+aggregation_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global background_task
+    global background_task, aggregation_task
     print("Server starting up...")
     await init_db_pool()
     
-    # --- START BACKGROUND TASK ---
+    # --- START BACKGROUND TASKS ---
     print("Starting background analysis task...")
     background_task = asyncio.create_task(run_analysis_loop())
+    
+    print("Starting incident aggregation task...")
+    aggregation_task = asyncio.create_task(run_incident_aggregation_loop())
     
     yield  # Application runs here
     
@@ -35,6 +50,14 @@ async def lifespan(app: FastAPI):
             await background_task
         except asyncio.CancelledError:
             print("Background analysis task cancelled.")
+    
+    if aggregation_task:
+        print("Stopping incident aggregation task...")
+        aggregation_task.cancel()
+        try:
+            await aggregation_task
+        except asyncio.CancelledError:
+            print("Incident aggregation task cancelled.")
             
     await close_db_pool()
 
@@ -59,6 +82,10 @@ app.include_router(auth.router, prefix="/auth")
 app.include_router(device.router, prefix="/api")
 app.include_router(websocket.router)
 app.include_router(query.router, prefix="/api")
+app.include_router(alerts.router, prefix="/api")
+app.include_router(metrics.router, prefix="/api")
+app.include_router(agent_alerts.router, prefix="/api")
+app.include_router(incidents.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(metrics.router, prefix="/api")
 

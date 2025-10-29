@@ -1,4 +1,5 @@
 # OS-generated files
+.gitignore
 .DS_Store
 .DS_Store?
 ._*
@@ -11,4 +12,6 @@ Thumbs.db
 detect_os.sh
 aegis-Dev-docs/
 ANALYSIS_REPORT.md
-IMPLEMENTATION_ROADMAP.md
+aegis-Dev-docs/IMPLEMENTATION_ROADMAP.md
+aegis-Dev-docs/AUDIT_REPORT.md
+aegis-Dev-docs/DATABASE_SCHEMA_ANALYSIS.md
