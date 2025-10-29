@@ -1,7 +1,7 @@
 // src/pages/AlertsPage.tsx
 
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { Link } from "react-router-dom";
 
