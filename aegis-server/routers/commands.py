@@ -83,6 +83,12 @@ async def ingest_commands(
                 raise HTTPException(status_code=403, detail="Agent not registered")
             
             user_id = record['user_id']
+            
+            # Update last_seen timestamp to indicate agent is active
+            await conn.execute(
+                "UPDATE devices SET last_seen = NOW(), status = 'online' WHERE agent_id = $1",
+                x_aegis_agent_id
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -128,6 +134,43 @@ async def ingest_commands(
     except Exception as e:
         print(f"Error storing commands: {e}")
         raise HTTPException(status_code=500, detail="Failed to store commands")
+
+
+@router.get("/commands/last-sync/{agent_id}")
+async def get_last_command_timestamp(
+    agent_id: uuid.UUID,
+    x_aegis_agent_id: str = Header(None)
+):
+    """Get the timestamp of the most recent command for an agent."""
+    try:
+        # Verify agent ID from header matches the route parameter
+        if x_aegis_agent_id != str(agent_id):
+            raise HTTPException(status_code=403, detail="Agent ID mismatch")
+        
+        pool = get_db_pool()
+        
+        # Get the most recent command timestamp for this agent
+        async with pool.acquire() as conn:
+            result = await conn.fetchrow(
+                """
+                SELECT MAX(timestamp) as last_timestamp
+                FROM commands
+                WHERE agent_id = $1
+                """,
+                agent_id
+            )
+        
+        if result and result['last_timestamp']:
+            return {"timestamp": result['last_timestamp'].isoformat()}
+        else:
+            # No commands yet, return None
+            return {"timestamp": None}
+            
+    except Exception as e:
+        print(f"Error fetching last command timestamp: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to fetch last command timestamp")
 
 
 @router.get("/commands", response_model=List[CommandResponse])

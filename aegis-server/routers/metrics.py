@@ -42,6 +42,12 @@ async def ingest_metrics(
             
             user_id = record['user_id']
             
+            # Update last_seen timestamp to indicate agent is active
+            await conn.execute(
+                "UPDATE devices SET last_seen = NOW(), status = 'online' WHERE agent_id = $1",
+                x_aegis_agent_id
+            )
+            
             # Convert model fields to JSON strings for JSONB columns
             cpu_json = json.dumps(dict(metrics.cpu))
             memory_json = json.dumps(dict(metrics.memory))

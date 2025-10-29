@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import {
   LineChart,
   Line,
@@ -151,6 +151,13 @@ const MetricsPage: React.FC = () => {
 
   return (
     <div className="p-4">
+      <Link
+        to="/"
+        className="text-sm text-blue-600 hover:text-blue-800 hover:underline mb-4 inline-block"
+      >
+        ← Back to Dashboard
+      </Link>
+
       <h1 className="text-2xl font-bold mb-4">Device Metrics</h1>
 
       {/* Current Values */}

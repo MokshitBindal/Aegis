@@ -134,11 +134,22 @@ def run_agent(args):
     command_thread = None
     try:
         from internal.collector.command_collector import CommandCollector
+        from internal.agent.credentials import load_credentials
+
+        # Load server URL from credentials
+        server_base = "http://127.0.0.1:8000"
+        try:
+            creds = load_credentials()
+            if creds and creds.get("server_url"):
+                server_base = creds.get("server_url")
+        except Exception as e:
+            print(f"Could not load credentials, using default server URL: {e}")
 
         command_collector = CommandCollector(
             storage=args.storage, 
             analysis_engine=analysis_engine,
-            agent_id=str(args.agent_id)
+            agent_id=str(args.agent_id),
+            server_base=server_base
         )
         print("Command collector initialized.")
     except ImportError as e:

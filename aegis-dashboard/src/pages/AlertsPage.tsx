@@ -37,6 +37,13 @@ export default function AlertsPage() {
   useEffect(() => {
     const fetchDevices = async () => {
       try {
+        // Refresh device statuses first
+        try {
+          await api.post("/api/devices/refresh-status");
+        } catch (err) {
+          console.error("Failed to refresh device statuses:", err);
+        }
+
         const response = await api.get("/api/devices");
         setDevices(response.data);
       } catch (err) {
@@ -109,11 +116,17 @@ export default function AlertsPage() {
             <select
               value={selectedDevice}
               onChange={(e) => handleDeviceChange(e.target.value)}
-              className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Devices</option>
+              <option value="all" className="bg-gray-800 text-gray-100">
+                All Devices
+              </option>
               {devices.map((device) => (
-                <option key={device.id} value={device.agent_id}>
+                <option
+                  key={device.id}
+                  value={device.agent_id}
+                  className="bg-gray-800 text-gray-100"
+                >
                   {device.name} ({device.hostname})
                 </option>
               ))}

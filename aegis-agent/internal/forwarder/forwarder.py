@@ -66,6 +66,8 @@ class Forwarder:
         self.ingest_url = f"{self.server_base}/api/ingest"
         self.metrics_url = f"{self.server_base}/api/metrics"
         self.alerts_url = f"{self.server_base}/api/agent-alerts"
+        self.commands_url = f"{self.server_base}/api/commands"
+        self.status_url = f"{self.server_base}/api/device/status"
 
         if not self.agent_id:
             raise ValueError(
@@ -94,13 +96,17 @@ class Forwarder:
         print("Forwarder initialized.")
 
     def start(self):
-        """Starts the forwarder thread."""
+        """Starts the forwarder thread and sends online status."""
         print("Forwarder thread starting...")
+        # Send online status to server
+        self.send_status("online")
         self.thread.start()
 
     def stop(self):
-        """Signals the forwarder thread to stop."""
+        """Signals the forwarder thread to stop and sends offline status."""
         print("Forwarder thread stopping...")
+        # Send offline status to server
+        self.send_status("offline")
         self.stop_event.set()
         self.thread.join() # Wait for the thread to finish
         print("Forwarder thread stopped.")
@@ -340,3 +346,29 @@ class Forwarder:
                 )
         except Exception as e:
             print(f"Error forwarding commands: {e}")
+    def send_status(self, status: str):
+        """
+        Sends agent status (online/offline) to the server.
+        
+        Args:
+            status: Either "online" or "offline"
+        """
+        try:
+            payload = {
+                "agent_id": self.agent_id,
+                "status": status
+            }
+            
+            response = requests.post(
+                self.status_url,
+                json=payload,
+                headers=self.headers,
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                print(f"Agent status updated to: {status}")
+            else:
+                print(f"Failed to update status: {response.status_code}")
+        except Exception as e:
+            print(f"Error sending status update: {e}")

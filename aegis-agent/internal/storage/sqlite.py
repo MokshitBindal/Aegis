@@ -73,11 +73,21 @@ class Storage:
         );
         """
         
+        # Track last synced timestamp for commands
+        sync_state_schema = """
+        CREATE TABLE IF NOT EXISTS sync_state (
+            key     TEXT PRIMARY KEY,
+            value   TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        """
+        
         try:
             with self.lock:
                 self.conn.execute(logs_schema)
                 self.conn.execute(alerts_schema)
                 self.conn.execute(commands_schema)
+                self.conn.execute(sync_state_schema)
                 self.conn.commit()
             print("Database schema verified.")
         except Exception as e:
@@ -317,4 +327,41 @@ class Storage:
         """
         if self.conn:
             self.conn.close()
-            print("Database connection closed.")
+            print("Database connection closed.")    
+    def get_last_command_sync_timestamp(self) -> str | None:
+        """
+        Gets the timestamp of the last command successfully synced to the server.
+        
+        Returns:
+            str | None: ISO format timestamp string, or None if never synced
+        """
+        sql = "SELECT value FROM sync_state WHERE key = 'last_command_sync'"
+        
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(sql)
+                row = cursor.fetchone()
+                return row['value'] if row else None
+        except Exception as e:
+            print(f"Error getting last command sync timestamp: {e}")
+            return None
+    
+    def set_last_command_sync_timestamp(self, timestamp: str):
+        """
+        Updates the timestamp of the last command successfully synced to the server.
+        
+        Args:
+            timestamp (str): ISO format timestamp string
+        """
+        sql = """
+        INSERT OR REPLACE INTO sync_state (key, value, updated_at)
+        VALUES ('last_command_sync', ?, ?)
+        """
+        
+        try:
+            with self.lock:
+                self.conn.execute(sql, (timestamp, datetime.now().isoformat()))
+                self.conn.commit()
+        except Exception as e:
+            print(f"Error setting last command sync timestamp: {e}")
