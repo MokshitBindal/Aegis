@@ -46,11 +46,22 @@ export default function DashboardPage() {
     const fetchDevices = async () => {
       try {
         setLoading(true);
+
+        // First, refresh all device statuses
+        try {
+          await api.post("/api/devices/refresh-status");
+        } catch (err) {
+          console.error("Failed to refresh device statuses:", err);
+          // Continue even if status refresh fails
+        }
+
+        // Then fetch devices with updated statuses
         const response = await api.get("/api/devices");
         setDevices(response.data);
         const initialStatuses: DeviceStatusMap = {};
         for (const device of response.data) {
-          initialStatuses[device.agent_id] = "offline";
+          // Use the status from the server
+          initialStatuses[device.agent_id] = device.status || "offline";
         }
         setStatuses(initialStatuses);
       } catch (err) {
@@ -188,20 +199,13 @@ export default function DashboardPage() {
                       className="p-4 hover:bg-gray-700 transition-colors"
                     >
                       <div className="flex items-center justify-between">
-                        <Link
-                          to={`/device/${device.agent_id}`}
-                          className="flex-1"
-                        >
-                          <div>
-                            <p className="text-lg font-semibold">
-                              {device.name}
-                            </p>
-                            <p className="text-sm text-gray-400">
-                              {device.hostname} (
-                              {device.agent_id.substring(0, 8)}...)
-                            </p>
-                          </div>
-                        </Link>
+                        <div className="flex-1">
+                          <p className="text-lg font-semibold">{device.name}</p>
+                          <p className="text-sm text-gray-400">
+                            {device.hostname} ({device.agent_id.substring(0, 8)}
+                            ...)
+                          </p>
+                        </div>
 
                         <div className="flex items-center gap-4">
                           {/* Quick Action Buttons */}

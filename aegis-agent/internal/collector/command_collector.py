@@ -8,10 +8,11 @@ Captures shell commands executed by users for security monitoring.
 import os
 import re
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 import pwd
+import requests
 
 
 class CommandCollector:
@@ -22,7 +23,7 @@ class CommandCollector:
     - Real-time command execution tracking
     """
     
-    def __init__(self, storage=None, analysis_engine=None, agent_id=None):
+    def __init__(self, storage=None, analysis_engine=None, agent_id=None, server_base=None):
         """
         Initialize the command collector.
         
@@ -30,14 +31,17 @@ class CommandCollector:
             storage: Storage instance for persisting commands
             analysis_engine: Analysis engine for real-time detection
             agent_id: Agent identifier
+            server_base: Base server URL (e.g., http://localhost:8000)
         """
         self.storage = storage
         self.analysis_engine = analysis_engine
         self.agent_id = agent_id or ""
+        self.server_base = server_base or "http://127.0.0.1:8000"
         self.last_positions = {}  # Track file positions for tail-like behavior
         self.seen_commands = set()  # Track command hashes to prevent duplicates
         self.platform = self._detect_platform()
         self.initialized = False  # Track if we've done initial setup
+        self.last_sync_timestamp = None  # Last command sync timestamp from server
         
         print(f"[CommandCollector] Initialized for platform: {self.platform}")
     
@@ -49,6 +53,43 @@ class CommandCollector:
             return 'macos'
         else:
             return 'unknown'
+    
+    def _fetch_last_sync_timestamp(self) -> Optional[datetime]:
+        """
+        Fetch the last command sync timestamp from the server.
+        This tells us the timestamp of the most recent command already stored on the server.
+        
+        Returns:
+            datetime object of last sync, or None if no commands exist yet
+        """
+        try:
+            url = f"{self.server_base}/api/commands/last-sync/{self.agent_id}"
+            headers = {"X-Aegis-Agent-ID": self.agent_id}
+            
+            response = requests.get(url, headers=headers, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                timestamp_str = data.get("timestamp")
+                
+                if timestamp_str:
+                    # Parse ISO format timestamp
+                    timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    print(f"[CommandCollector] Last sync timestamp from server: {timestamp}")
+                    return timestamp
+                else:
+                    print("[CommandCollector] No previous commands on server, collecting all")
+                    return None
+            else:
+                print(f"[CommandCollector] Failed to fetch last sync timestamp: {response.status_code}")
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            print(f"[CommandCollector] Error fetching last sync timestamp: {e}")
+            return None
+        except Exception as e:
+            print(f"[CommandCollector] Unexpected error fetching last sync: {e}")
+            return None
     
     def _initialize_file_positions(self):
         """
@@ -85,12 +126,20 @@ class CommandCollector:
         """
         commands = []
         
-        # On first run, initialize file positions to end of files (skip old history)
+        # On first run, fetch last sync timestamp from server and initialize file positions
         if not self.initialized:
+            self.last_sync_timestamp = self._fetch_last_sync_timestamp()
+            
+            # If no previous sync, set to 6 months ago (retention policy)
+            if self.last_sync_timestamp is None:
+                from datetime import timedelta
+                six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
+                self.last_sync_timestamp = six_months_ago
+                print(f"[CommandCollector] No previous sync, using 6-month retention: {six_months_ago}")
+            
             self._initialize_file_positions()
             self.initialized = True
-            print("[CommandCollector] Skipping historical commands on first run")
-            return []  # Don't process old commands on startup
+            print("[CommandCollector] First run initialized, will collect commands newer than last sync")
         
         # Collect from shell history files
         commands.extend(self._collect_from_history_files())
@@ -205,11 +254,15 @@ class CommandCollector:
         
         if match:
             timestamp_str, elapsed, command = match.groups()
-            timestamp = datetime.fromtimestamp(int(timestamp_str))
+            timestamp = datetime.fromtimestamp(int(timestamp_str), tz=timezone.utc)
         else:
             # Fallback: plain command without timestamp
-            timestamp = datetime.now()
+            timestamp = datetime.now(timezone.utc)
             command = line
+        
+        # Filter: only collect commands newer than last sync
+        if self.last_sync_timestamp and timestamp <= self.last_sync_timestamp:
+            return None
         
         return {
             'command': command.strip(),
@@ -222,11 +275,17 @@ class CommandCollector:
         }
     
     def _parse_bash_history_line(self, line: str, username: str, source: str) -> Optional[Dict]:
-        """Parse standard bash history line (plain command)."""
+        """
+        Parse standard bash history line (plain command).
+        Note: Bash doesn't store timestamps by default, so we use current time.
+        This means bash commands will always be collected.
+        """
+        # For bash without timestamps, we can't filter by time, so collect all new ones
+        # Consider using HISTTIMEFORMAT in .bashrc to enable timestamp tracking
         return {
             'command': line.strip(),
             'user': username,
-            'timestamp': datetime.now().isoformat(),  # Bash doesn't store timestamps by default
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'shell': 'bash',
             'source': source,
             'working_directory': None,

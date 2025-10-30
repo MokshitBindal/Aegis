@@ -58,6 +58,12 @@ async def receive_agent_alerts(
                 raise HTTPException(
                     status_code=404, detail="Agent not found. Please register first."
                 )
+            
+            # Update last_seen timestamp to indicate agent is active
+            await conn.execute(
+                "UPDATE devices SET last_seen = NOW(), status = 'online' WHERE agent_id = $1",
+                uuid.UUID(x_aegis_agent_id)
+            )
 
             # Store each alert
             stored_count = 0

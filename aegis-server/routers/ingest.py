@@ -50,6 +50,12 @@ async def ingest_logs(
             
             user_id = record['user_id']
             
+            # Update last_seen timestamp to indicate agent is active
+            await conn.execute(
+                "UPDATE devices SET last_seen = NOW(), status = 'online' WHERE agent_id = $1",
+                x_aegis_agent_id
+            )
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent auth error: {e}")
 

@@ -16,6 +16,7 @@ from routers import (
     auth,
     commands,
     device,
+    device_status,
     incidents,
     ingest,
     metrics,
@@ -81,6 +82,7 @@ app.add_middleware(
 app.include_router(ingest.router, prefix="/api")
 app.include_router(auth.router, prefix="/auth")
 app.include_router(device.router, prefix="/api")
+app.include_router(device_status.router, prefix="/api")
 app.include_router(websocket.router)
 app.include_router(query.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")

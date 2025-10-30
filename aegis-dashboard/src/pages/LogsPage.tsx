@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { api } from "../lib/api";
 
@@ -20,6 +20,10 @@ const LogsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [hostnameFilter, setHostnameFilter] = useState<string>("all");
+  const [processFilter, setProcessFilter] = useState<string>("all");
+  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -80,12 +84,44 @@ const LogsPage: React.FC = () => {
     setAutoScroll(isAtBottom);
   };
 
-  // Filter logs by severity
+  // Filter logs by severity, search, hostname, and process
   const filteredLogs = logs.filter((log) => {
-    if (severityFilter === "all") return true;
-    const severityName = getSeverityName(log.severity).toLowerCase();
-    return severityName === severityFilter.toLowerCase();
+    // Severity filter
+    if (severityFilter !== "all") {
+      const severityName = getSeverityName(log.severity).toLowerCase();
+      if (severityName !== severityFilter.toLowerCase()) return false;
+    }
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (
+        !log.message.toLowerCase().includes(query) &&
+        !log.hostname.toLowerCase().includes(query) &&
+        !(log.process_name?.toLowerCase().includes(query) ?? false)
+      ) {
+        return false;
+      }
+    }
+
+    // Hostname filter
+    if (hostnameFilter !== "all" && log.hostname !== hostnameFilter) {
+      return false;
+    }
+
+    // Process filter
+    if (processFilter !== "all" && log.process_name !== processFilter) {
+      return false;
+    }
+
+    return true;
   });
+
+  // Get unique hostnames and processes for filters
+  const uniqueHostnames = Array.from(new Set(logs.map((log) => log.hostname)));
+  const uniqueProcesses = Array.from(
+    new Set(logs.map((log) => log.process_name).filter(Boolean))
+  );
 
   // Get severity badge color
   const getSeverityColor = (severity: string) => {
@@ -133,6 +169,12 @@ const LogsPage: React.FC = () => {
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200 p-4">
+        <Link
+          to="/"
+          className="text-sm text-blue-600 hover:text-blue-800 hover:underline mb-2 inline-block"
+        >
+          ← Back to Dashboard
+        </Link>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Live Logs</h1>
@@ -142,6 +184,56 @@ const LogsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Search Box */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                Search:
+              </label>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search logs..."
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+              />
+            </div>
+
+            {/* Hostname Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Host:</label>
+              <select
+                value={hostnameFilter}
+                onChange={(e) => setHostnameFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All</option>
+                {uniqueHostnames.map((hostname) => (
+                  <option key={hostname} value={hostname}>
+                    {hostname}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Process Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                Process:
+              </label>
+              <select
+                value={processFilter}
+                onChange={(e) => setProcessFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All</option>
+                {uniqueProcesses.map((process) => (
+                  <option key={process} value={process}>
+                    {process}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Severity Filter */}
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700">
@@ -150,7 +242,7 @@ const LogsPage: React.FC = () => {
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All</option>
                 <option value="emergency">Emergency</option>
@@ -246,7 +338,8 @@ const LogsPage: React.FC = () => {
             {filteredLogs.map((log) => (
               <div
                 key={log.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                onClick={() => setSelectedLog(log)}
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer"
               >
                 <div className="flex items-start gap-3">
                   {/* Severity Badge */}
@@ -292,6 +385,140 @@ const LogsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Log Details Modal */}
+      {selectedLog && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={() => setSelectedLog(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Log Details
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      JSON.stringify(selectedLog, null, 2)
+                    );
+                    alert("Log copied to clipboard!");
+                  }}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Copy JSON
+                </button>
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {/* Severity Badge */}
+              <div className="mb-4">
+                <span
+                  className={`px-3 py-1.5 text-sm font-semibold rounded-md border ${getSeverityColor(
+                    selectedLog.severity
+                  )}`}
+                >
+                  {getSeverityName(selectedLog.severity).toUpperCase()}
+                </span>
+              </div>
+
+              {/* Log Fields */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Timestamp
+                  </label>
+                  <p className="text-sm text-gray-900 font-mono mt-1">
+                    {formatTime(selectedLog.timestamp)}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Hostname
+                  </label>
+                  <p className="text-sm text-gray-900 mt-1">
+                    {selectedLog.hostname}
+                  </p>
+                </div>
+
+                {selectedLog.process_name && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">
+                      Process
+                    </label>
+                    <p className="text-sm text-gray-900 mt-1">
+                      {selectedLog.process_name}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Facility
+                  </label>
+                  <p className="text-sm text-gray-900 font-mono mt-1">
+                    {selectedLog.facility}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Agent ID
+                  </label>
+                  <p className="text-sm text-gray-900 font-mono mt-1">
+                    {selectedLog.agent_id}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Message
+                  </label>
+                  <div className="mt-1 p-3 bg-gray-50 rounded-md border border-gray-200">
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                      {selectedLog.message}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Raw JSON */}
+                <div>
+                  <label className="text-sm font-medium text-gray-500">
+                    Raw JSON
+                  </label>
+                  <pre className="mt-1 p-3 bg-gray-900 text-gray-100 rounded-md text-xs overflow-x-auto">
+                    {JSON.stringify(selectedLog, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
