@@ -32,12 +32,11 @@ const LogsPage: React.FC = () => {
     const fetchLogs = async () => {
       try {
         setLoading(true);
-        const response = await api.get(`/api/query/logs`, {
-          params: {
-            agent_id: deviceId,
-            limit: 100,
-          },
-        });
+        const params: any = { limit: 100 };
+        if (deviceId) {
+          params.agent_id = deviceId;
+        }
+        const response = await api.get(`/api/query/logs`, { params });
         setLogs(response.data.reverse()); // Reverse to show oldest first
       } catch (error) {
         console.error("Failed to fetch logs:", error);
@@ -46,9 +45,7 @@ const LogsPage: React.FC = () => {
       }
     };
 
-    if (deviceId) {
-      fetchLogs();
-    }
+    fetchLogs();
   }, [deviceId]);
 
   // Auto-scroll to bottom when new logs arrive

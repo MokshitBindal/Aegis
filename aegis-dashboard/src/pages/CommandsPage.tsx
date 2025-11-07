@@ -62,7 +62,7 @@ const CommandsPage: React.FC = () => {
       setError(null);
 
       try {
-        const params: any = { limit: 100 };
+        const params: any = { limit: 500 }; // Increased from 100 to 500
 
         if (selectedDevice !== "all") {
           params.agent_id = selectedDevice;

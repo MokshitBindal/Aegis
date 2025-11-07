@@ -17,7 +17,7 @@ interface Device {
 type DeviceStatusMap = Record<string, "online" | "offline">;
 
 export default function DashboardPage() {
-  const { logout } = useAuth();
+  const { logout, userInfo, isOwner, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [statuses, setStatuses] = useState<DeviceStatusMap>({});
@@ -106,7 +106,15 @@ export default function DashboardPage() {
   return (
     <div className="container p-8 mx-auto">
       <header className="flex items-center justify-between pb-4 border-b border-gray-700">
-        <h1 className="text-3xl font-bold">Aegis Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Aegis Dashboard</h1>
+          {userInfo && (
+            <p className="text-sm text-gray-400 mt-1">
+              Logged in as <span className="font-medium text-gray-300">{userInfo.email}</span>
+              {" "}(<span className="capitalize">{userInfo.role.replace('_', ' ')}</span>)
+            </p>
+          )}
+        </div>
         <button
           onClick={handleLogout}
           className="px-4 py-2 font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
@@ -114,6 +122,44 @@ export default function DashboardPage() {
           Logout
         </button>
       </header>
+
+      {/* Role-based Navigation */}
+      <nav className="mt-6 flex gap-4 flex-wrap">
+        <Link
+          to="/logs"
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+        >
+          System Logs
+        </Link>
+        <Link
+          to="/alerts"
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+        >
+          View Alerts
+        </Link>
+        <Link
+          to="/commands"
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+        >
+          Command History
+        </Link>
+        {(isAdmin || isOwner) && (
+          <Link
+            to="/alert-triage"
+            className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors"
+          >
+            🔍 Alert Triage
+          </Link>
+        )}
+        {isOwner && (
+          <Link
+            to="/user-management"
+            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+          >
+            👥 User Management
+          </Link>
+        )}
+      </nav>
 
       <main className="mt-8">
         <div className="flex justify-between items-center mb-4">
@@ -167,18 +213,6 @@ export default function DashboardPage() {
                 </>
               )}
             </button>
-            <Link
-              to="/alerts"
-              className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-            >
-              View Alerts
-            </Link>
-            <Link
-              to="/commands"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Command History
-            </Link>
           </div>
         </div>
         <div className="mt-4 overflow-hidden bg-gray-800 rounded-lg shadow">
@@ -216,6 +250,13 @@ export default function DashboardPage() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               Logs
+                            </Link>
+                            <Link
+                              to={`/commands/${device.agent_id}`}
+                              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Commands
                             </Link>
                             <Link
                               to={`/device/${device.agent_id}/metrics`}

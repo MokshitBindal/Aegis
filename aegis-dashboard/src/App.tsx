@@ -8,6 +8,8 @@ import AlertsPage from "./pages/AlertsPage";
 import MetricsPage from "./pages/MetricsPage";
 import LogsPage from "./pages/LogsPage";
 import CommandsPage from "./pages/CommandsPage";
+import AlertTriagePage from "./pages/AlertTriagePage";
+import UserManagementPage from "./pages/UserManagementPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -93,6 +95,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <CommandsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/alert-triage"
+        element={
+          <ProtectedRoute>
+            <AlertTriagePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user-management"
+        element={
+          <ProtectedRoute>
+            <UserManagementPage />
           </ProtectedRoute>
         }
       />

@@ -2,8 +2,40 @@
 
 import uuid
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+# --- Role-Based Access Control ---
+
+class UserRole(str, Enum):
+    """
+    Enum for user roles in the RBAC system.
+    owner: Super admin, can create admins and manage all resources
+    admin: SOC analyst, can claim and triage alerts
+    device_user: Standard user, can view only their own devices
+    """
+    OWNER = "owner"
+    ADMIN = "admin"
+    DEVICE_USER = "device_user"
+
+class AssignmentStatus(str, Enum):
+    """
+    Enum for alert assignment status.
+    """
+    UNASSIGNED = "unassigned"
+    ASSIGNED = "assigned"
+    INVESTIGATING = "investigating"
+    RESOLVED = "resolved"
+    ESCALATED = "escalated"
+
+class ResolutionType(str, Enum):
+    """
+    Enum for alert resolution types.
+    """
+    TRUE_POSITIVE = "true_positive"
+    FALSE_POSITIVE = "false_positive"
+    BENIGN_POSITIVE = "benign_positive"
 
 # --- Log Ingestion Models ---
 
@@ -39,6 +71,10 @@ class UserInDB(BaseModel):
     """
     id: int
     email: EmailStr
+    role: UserRole = UserRole.DEVICE_USER
+    is_active: bool = True
+    created_by: int | None = None
+    last_login: datetime | None = None
     
 class Token(BaseModel):
     """
@@ -52,6 +88,8 @@ class TokenData(BaseModel):
     Pydantic model for the data encoded within a JWT.
     """
     email: EmailStr | None = None
+    role: UserRole | None = None
+    user_id: int | None = None
 
 class Invitation(BaseModel):
     """
@@ -82,3 +120,76 @@ class Device(BaseModel):
     name: str
     hostname: str
     registered_at: datetime
+    user_id: int | None = None
+
+
+# --- Alert Assignment Models ---
+
+class AlertAssignment(BaseModel):
+    """
+    Model for alert assignments (triage workflow).
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    alert_id: int
+    assigned_to: int
+    assigned_at: datetime
+    status: AssignmentStatus
+    notes: str | None = None
+    resolution: ResolutionType | None = None
+    resolved_at: datetime | None = None
+    escalated_at: datetime | None = None
+    escalated_to: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+class AlertAssignmentCreate(BaseModel):
+    """
+    Model for claiming an alert.
+    """
+    alert_id: int
+
+class AlertAssignmentUpdate(BaseModel):
+    """
+    Model for updating alert assignment status and notes.
+    """
+    status: AssignmentStatus | None = None
+    notes: str | None = None
+    resolution: ResolutionType | None = None
+
+class AlertEscalation(BaseModel):
+    """
+    Model for escalating an alert to owner.
+    """
+    notes: str
+
+# --- User Management Models ---
+
+class UserCreateByOwner(BaseModel):
+    """
+    Model for Owner creating Admin users.
+    """
+    email: EmailStr
+    password: str
+    role: UserRole
+
+class UserResponse(BaseModel):
+    """
+    Model for user info returned to UI (without password hash).
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    email: EmailStr
+    role: UserRole
+    is_active: bool
+    created_by: int | None = None
+    last_login: datetime | None = None
+
+class UserUpdate(BaseModel):
+    """
+    Model for updating user by Owner.
+    """
+    role: UserRole | None = None
+    is_active: bool | None = None

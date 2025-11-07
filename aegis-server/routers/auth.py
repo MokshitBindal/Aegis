@@ -19,10 +19,11 @@ async def signup(
     # ... (This function remains unchanged) ...
     pool = get_db_pool()
     hashed_pass = get_password_hash(user.password)
-    sql = "INSERT INTO users (email, hashed_pass) VALUES ($1, $2) RETURNING id, email"
+    # Include default role as device_user
+    sql = "INSERT INTO users (email, hashed_pass, role) VALUES ($1, $2, $3) RETURNING id, email, role, is_active"
     try:
         async with pool.acquire() as conn:
-            new_user = await conn.fetchrow(sql, user.email, hashed_pass)
+            new_user = await conn.fetchrow(sql, user.email, hashed_pass, "device_user")
             if new_user:
                 return UserInDB.model_validate(dict(new_user))
             else:
@@ -49,14 +50,14 @@ async def login(
 ):
     """
     Handles user login.
-    Verifies email and password, then returns a JWT.
+    Verifies email and password, then returns a JWT with role and user_id.
     """
     pool = get_db_pool()
     email = form_data.username
     password = form_data.password
 
     # 1. Find the user
-    sql = "SELECT * FROM users WHERE email = $1"
+    sql = "SELECT id, email, hashed_pass, role, is_active FROM users WHERE email = $1"
     try:
         async with pool.acquire() as conn:
             db_user = await conn.fetchrow(sql, email)
@@ -71,6 +72,13 @@ async def login(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Incorrect email or password"
         )
+    
+    # Check if user is active
+    if not db_user['is_active']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled"
+        )
 
     # 2. Verify the password
     if not verify_password(password, db_user['hashed_pass']):
@@ -79,8 +87,21 @@ async def login(
             detail="Incorrect email or password"
         )
 
-    # 3. --- MODIFICATION: Generate and return a JWT ---
-    # The 'sub' (subject) of the token is the user's email.
-    access_token = create_access_token(data={"sub": db_user['email']})
+    # 3. Update last_login timestamp
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE users SET last_login = NOW() WHERE id = $1",
+                db_user['id']
+            )
+    except Exception:
+        pass  # Non-critical failure
+    
+    # 4. Generate and return a JWT with role and user_id
+    access_token = create_access_token(data={
+        "sub": db_user['email'],
+        "role": db_user['role'],
+        "user_id": db_user['id']
+    })
     
     return Token(access_token=access_token, token_type="bearer")

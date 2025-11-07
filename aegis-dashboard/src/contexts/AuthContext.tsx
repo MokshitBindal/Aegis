@@ -8,28 +8,71 @@ import {
 } from "react";
 import { authApi } from "../lib/api";
 
+export type UserRole = "owner" | "admin" | "device_user";
+
+export interface UserInfo {
+  email: string;
+  role: UserRole;
+  userId: number;
+}
+
 interface AuthContextType {
   token: string | null;
+  userInfo: UserInfo | null;
   login: (email: string, pass: string) => Promise<void>;
   logout: () => void;
+  isOwner: boolean;
+  isAdmin: boolean;
+  isDeviceUser: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper function to decode JWT and extract user info
+function decodeToken(token: string): UserInfo | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    const payload = JSON.parse(atob(parts[1]));
+
+    return {
+      email: payload.sub,
+      role: payload.role,
+      userId: payload.user_id,
+    };
+  } catch (err) {
+    console.error("Failed to decode token:", err);
+    return null;
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(
     localStorage.getItem("aegis_token")
   );
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+
+  // Decode token when it changes
+  useEffect(() => {
+    if (token) {
+      const decoded = decodeToken(token);
+      setUserInfo(decoded);
+      console.log("AuthContext: Decoded user info:", decoded);
+    } else {
+      setUserInfo(null);
+    }
+  }, [token]);
 
   useEffect(() => {
     // Persist token changes to localStorage
-    console.log('AuthContext useEffect: Token changed to:', token);
+    console.log("AuthContext useEffect: Token changed to:", token);
     if (token) {
-      console.log('AuthContext useEffect: Setting token in localStorage');
-      localStorage.setItem('aegis_token', token);
+      console.log("AuthContext useEffect: Setting token in localStorage");
+      localStorage.setItem("aegis_token", token);
     } else {
-      console.log('AuthContext useEffect: Removing token from localStorage');
-      localStorage.removeItem('aegis_token');
+      console.log("AuthContext useEffect: Removing token from localStorage");
+      localStorage.removeItem("aegis_token");
     }
   }, [token]);
 
@@ -63,8 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
   };
 
+  // Computed properties for role checks
+  const isOwner = userInfo?.role === "owner";
+  const isAdmin = userInfo?.role === "admin";
+  const isDeviceUser = userInfo?.role === "device_user";
+
   return (
-    <AuthContext.Provider value={{ token, login, logout }}>
+    <AuthContext.Provider
+      value={{ token, userInfo, login, logout, isOwner, isAdmin, isDeviceUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

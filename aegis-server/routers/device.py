@@ -8,10 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from internal.auth.jwt import get_current_user
 
-# --- MODIFICATION: Import verify_password ---
+# --- MODIFICATION: Import verify_password and permissions ---
+from internal.auth.permissions import check_device_ownership
 from internal.auth.security import get_password_hash, verify_password
 from internal.storage.postgres import get_db_pool
-from models.models import Device, DeviceRegister, Invitation, TokenData, UserInDB
+from models.models import Device, DeviceRegister, Invitation, TokenData, UserInDB, UserRole
 
 router = APIRouter()
 
@@ -137,18 +138,22 @@ async def list_devices(
     current_user: TokenData = Depends(get_current_user)
 ):
     """
-    Lists all devices registered to the currently authenticated user.
+    Lists devices based on user role:
+    - Device User: Only their own devices
+    - Admin: All devices
+    - Owner: All devices
     """
     pool = get_db_pool()
     try:
         async with pool.acquire() as conn:
-            user = await get_user_by_email(current_user.email, conn)
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-
-            # Fetch all devices linked to this user's ID
-            sql = "SELECT * FROM devices WHERE user_id = $1 ORDER BY registered_at DESC"
-            device_records = await conn.fetch(sql, user.id)
+            # Owner and Admin can see all devices
+            if current_user.role in [UserRole.OWNER, UserRole.ADMIN]:
+                sql = "SELECT * FROM devices ORDER BY registered_at DESC"
+                device_records = await conn.fetch(sql)
+            else:
+                # Device User can only see their own devices
+                sql = "SELECT * FROM devices WHERE user_id = $1 ORDER BY registered_at DESC"
+                device_records = await conn.fetch(sql, current_user.user_id)
             
             # Validate and return the list
             return [Device.model_validate(dict(record)) for record in device_records]

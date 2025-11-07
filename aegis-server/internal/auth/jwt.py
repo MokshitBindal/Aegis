@@ -57,11 +57,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         
         # The 'sub' (subject) field should contain our user's email
         email: str = payload.get("sub")
+        role: str = payload.get("role")
+        user_id: int = payload.get("user_id")
+        
         if email is None:
             raise credentials_exception
             
         # Validate the payload against our TokenData model
-        token_data = TokenData(email=email)
+        token_data = TokenData(email=email, role=role, user_id=user_id)
         
     except (JWTError, ValidationError):
         raise credentials_exception

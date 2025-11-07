@@ -10,9 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from internal.analysis.correlation import run_analysis_loop
 from internal.analysis.incident_aggregator import run_incident_aggregation_loop
 from internal.storage.postgres import close_db_pool, init_db_pool
+from internal.utils.cleanup_task import run_daily_cleanup
 from routers import (
     agent_alerts,
     alerts,
+    alert_triage,
     auth,
     commands,
     device,
@@ -21,16 +23,18 @@ from routers import (
     ingest,
     metrics,
     query,
+    user_management,
     websocket,
 )
 
 # Store the background tasks so we can cancel them on shutdown
 background_task = None
 aggregation_task = None
+cleanup_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global background_task, aggregation_task
+    global background_task, aggregation_task, cleanup_task
     print("Server starting up...")
     await init_db_pool()
     
@@ -40,6 +44,9 @@ async def lifespan(app: FastAPI):
     
     print("Starting incident aggregation task...")
     aggregation_task = asyncio.create_task(run_incident_aggregation_loop())
+    
+    print("Starting daily data retention cleanup task...")
+    cleanup_task = asyncio.create_task(run_daily_cleanup())
     
     yield  # Application runs here
     
@@ -60,6 +67,14 @@ async def lifespan(app: FastAPI):
             await aggregation_task
         except asyncio.CancelledError:
             print("Incident aggregation task cancelled.")
+    
+    if cleanup_task:
+        print("Stopping cleanup task...")
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            print("Cleanup task cancelled.")
             
     await close_db_pool()
 
@@ -86,6 +101,8 @@ app.include_router(device_status.router, prefix="/api")
 app.include_router(websocket.router)
 app.include_router(query.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
+app.include_router(alert_triage.router, prefix="/api")
+app.include_router(user_management.router, prefix="/api")
 app.include_router(metrics.router, prefix="/api")
 app.include_router(agent_alerts.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
