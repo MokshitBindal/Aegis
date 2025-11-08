@@ -48,15 +48,35 @@ async def get_alerts(
             
             # Build query based on filters
             if agent_id:
-                # Verify user owns this device
-                device_check = await conn.fetchrow(
-                    "SELECT id FROM devices WHERE user_id = $1 AND agent_id = $2",
-                    user.id, agent_id
-                )
+                # Verify user has access to this device (owner, assigned, or owns it)
+                from models.models import UserRole
+                
+                if user.role == UserRole.OWNER:
+                    # Owner can access all devices
+                    device_check = await conn.fetchrow(
+                        "SELECT id FROM devices WHERE agent_id = $1", agent_id
+                    )
+                elif user.role == UserRole.ADMIN:
+                    # Admin can access devices they own OR are assigned to
+                    device_check = await conn.fetchrow(
+                        """
+                        SELECT d.id FROM devices d
+                        LEFT JOIN device_assignments da ON d.id = da.device_id
+                        WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                        """,
+                        agent_id, user.id
+                    )
+                else:
+                    # Device User can only access their own devices
+                    device_check = await conn.fetchrow(
+                        "SELECT id FROM devices WHERE agent_id = $1 AND user_id = $2",
+                        agent_id, user.id
+                    )
+                
                 if not device_check:
                     raise HTTPException(
                         status_code=403,
-                        detail="Access forbidden: You do not own this device"
+                        detail="Access forbidden: You do not have access to this device"
                     )
                 
                 # Fetch alerts for specific device
@@ -68,16 +88,40 @@ async def get_alerts(
                 """
                 alert_records = await conn.fetch(sql, agent_id, limit)
             else:
-                # Fetch alerts for all devices owned by this user
-                sql = """
-                SELECT a.* 
-                FROM alerts a
-                LEFT JOIN devices d ON a.agent_id = d.agent_id
-                WHERE d.user_id = $1 OR a.agent_id IS NULL
-                ORDER BY a.created_at DESC 
-                LIMIT $2
-                """
-                alert_records = await conn.fetch(sql, user.id, limit)
+                # Fetch alerts for all accessible devices
+                from models.models import UserRole
+                
+                if user.role == UserRole.OWNER:
+                    # Owner sees all alerts
+                    sql = """
+                    SELECT * FROM alerts
+                    ORDER BY created_at DESC 
+                    LIMIT $1
+                    """
+                    alert_records = await conn.fetch(sql, limit)
+                elif user.role == UserRole.ADMIN:
+                    # Admin sees alerts from owned devices + assigned devices
+                    sql = """
+                    SELECT a.* 
+                    FROM alerts a
+                    INNER JOIN devices d ON a.agent_id = d.agent_id
+                    LEFT JOIN device_assignments da ON d.id = da.device_id
+                    WHERE d.user_id = $1 OR da.user_id = $1 OR a.agent_id IS NULL
+                    ORDER BY a.created_at DESC 
+                    LIMIT $2
+                    """
+                    alert_records = await conn.fetch(sql, user.id, limit)
+                else:
+                    # Device User sees only their own device alerts
+                    sql = """
+                    SELECT a.* 
+                    FROM alerts a
+                    LEFT JOIN devices d ON a.agent_id = d.agent_id
+                    WHERE d.user_id = $1 OR a.agent_id IS NULL
+                    ORDER BY a.created_at DESC 
+                    LIMIT $2
+                    """
+                    alert_records = await conn.fetch(sql, user.id, limit)
             
             # Convert agent_id to string and parse details JSON for serialization
             alerts = []

@@ -180,6 +180,9 @@ async def assign_device(
     Assign a device to a specific user (admin or device_user).
     Only Owner can assign devices.
     
+    This creates an entry in device_assignments table, allowing the user to access the device.
+    Multiple admins can be assigned to the same device.
+    
     **Args:**
         device_id: ID of the device to assign
         user_id: ID of the user to assign the device to
@@ -205,7 +208,7 @@ async def assign_device(
             if not device:
                 raise HTTPException(status_code=404, detail="Device not found")
             
-            # Check if user exists
+            # Check if user exists and get their info
             user = await conn.fetchrow(
                 "SELECT * FROM users WHERE id = $1",
                 user_id
@@ -213,11 +216,21 @@ async def assign_device(
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            # Update device ownership
+            # Get the owner's ID for the assigned_by field
+            owner = await get_user_by_email(current_user.email, conn)
+            if not owner:
+                raise HTTPException(status_code=404, detail="Owner not found")
+            
+            # Insert into device_assignments table (UPSERT to avoid duplicates)
             await conn.execute(
-                "UPDATE devices SET user_id = $1 WHERE id = $2",
+                """
+                INSERT INTO device_assignments (device_id, user_id, assigned_by)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (device_id, user_id) DO NOTHING
+                """,
+                device_id,
                 user_id,
-                device_id
+                owner.id
             )
             
             return {
@@ -225,13 +238,16 @@ async def assign_device(
                 "device_id": device_id,
                 "device_name": device["name"],
                 "user_id": user_id,
-                "user_email": user["email"]
+                "user_email": user["email"],
+                "user_role": user["role"]
             }
     
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error assigning device: {e}")
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Failed to assign device")
 
 
@@ -266,17 +282,98 @@ async def get_unassigned_devices(
         raise HTTPException(status_code=500, detail="Failed to fetch unassigned devices")
 
 
-@router.delete("/device/{device_id}/unassign")
-async def unassign_device(
+@router.get("/device/{device_id}/assignments")
+async def get_device_assignments(
     device_id: int,
     current_user: TokenData = Depends(get_current_user)
 ):
     """
-    Unassign a device from its current user.
+    Get all user assignments for a specific device.
+    Only Owner can view device assignments.
+    
+    **Args:**
+        device_id: ID of the device
+    
+    **Returns:**
+        List of users assigned to this device with assignment details
+    """
+    # Only Owner can view assignments
+    if current_user.role != UserRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Owner can view device assignments"
+        )
+    
+    pool = get_db_pool()
+    try:
+        async with pool.acquire() as conn:
+            # Check if device exists
+            device = await conn.fetchrow(
+                "SELECT * FROM devices WHERE id = $1",
+                device_id
+            )
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found")
+            
+            # Get all assignments for this device
+            assignments = await conn.fetch(
+                """
+                SELECT 
+                    da.id as assignment_id,
+                    da.assigned_at,
+                    u.id as user_id,
+                    u.email,
+                    u.role,
+                    assigner.email as assigned_by_email
+                FROM device_assignments da
+                INNER JOIN users u ON da.user_id = u.id
+                LEFT JOIN users assigner ON da.assigned_by = assigner.id
+                WHERE da.device_id = $1
+                ORDER BY da.assigned_at DESC
+                """,
+                device_id
+            )
+            
+            return {
+                "device_id": device_id,
+                "device_name": device["name"],
+                "assignments": [
+                    {
+                        "assignment_id": row["assignment_id"],
+                        "user_id": row["user_id"],
+                        "user_email": row["email"],
+                        "user_role": row["role"],
+                        "assigned_at": row["assigned_at"].isoformat(),
+                        "assigned_by": row["assigned_by_email"]
+                    }
+                    for row in assignments
+                ]
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching device assignments: {e}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to fetch device assignments")
+
+
+@router.delete("/device/{device_id}/unassign")
+async def unassign_device(
+    device_id: int,
+    user_id: int,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """
+    Unassign a device from a specific user.
     Only Owner can unassign devices.
+    
+    This removes the entry from device_assignments table.
     
     **Args:**
         device_id: ID of the device to unassign
+        user_id: ID of the user to remove access from
     
     **Returns:**
         Success message
@@ -299,20 +396,42 @@ async def unassign_device(
             if not device:
                 raise HTTPException(status_code=404, detail="Device not found")
             
-            # Unassign device
+            # Check if assignment exists
+            assignment = await conn.fetchrow(
+                "SELECT * FROM device_assignments WHERE device_id = $1 AND user_id = $2",
+                device_id, user_id
+            )
+            if not assignment:
+                raise HTTPException(
+                    status_code=404, 
+                    detail="No assignment found for this device and user"
+                )
+            
+            # Get user info for response
+            user = await conn.fetchrow(
+                "SELECT email FROM users WHERE id = $1",
+                user_id
+            )
+            
+            # Remove assignment
             await conn.execute(
-                "UPDATE devices SET user_id = NULL WHERE id = $1",
-                device_id
+                "DELETE FROM device_assignments WHERE device_id = $1 AND user_id = $2",
+                device_id,
+                user_id
             )
             
             return {
                 "message": "Device unassigned successfully",
                 "device_id": device_id,
-                "device_name": device["name"]
+                "device_name": device["name"],
+                "user_id": user_id,
+                "user_email": user["email"] if user else "Unknown"
             }
     
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error unassigning device: {e}")
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Failed to unassign device")

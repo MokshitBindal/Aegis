@@ -21,13 +21,20 @@ Timeframe = Literal["1h", "6h", "24h", "7d"]
 @router.get("/query/logs")
 async def get_logs_for_agent(
     request: Request,
-    agent_id: uuid.UUID = Query(...), # Require an agent_id
+    agent_id: uuid.UUID = Query(None), # Optional agent_id - None means all devices
     timeframe: Timeframe = Query("24h"), # Default to 24h
     limit: int = Query(1000, le=5000), # Default 1000, max 5000
     current_user: TokenData = Depends(get_current_user)
 ):
     """
-    Fetches logs for a specific agent, owned by the current user.
+    Fetches logs for a specific agent or all accessible agents.
+    - If agent_id is provided: Returns logs for that specific device (if user has access)
+    - If agent_id is None: Returns logs from all devices the user can access
+    
+    Access control:
+    - Device User: Only their own devices
+    - Admin: Devices they're assigned to + devices they own
+    - Owner: All devices
     """
     pool = get_db_pool()
     
@@ -50,33 +57,111 @@ async def get_logs_for_agent(
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            # 2. Verify this user *owns* the agent they are asking about
-            sql_check = "SELECT id FROM devices WHERE user_id = $1 AND agent_id = $2"
-            device = await conn.fetchrow(sql_check, user.id, agent_id)
-            if not device:
-                # If no record, this user does not own this agent
-                raise HTTPException(
-                    status_code=403,
-                    detail="Access forbidden: You do not own this agent",
-                )
+            # 2. Determine which devices the user can access
+            from models.models import UserRole
             
-            # --- If check passes, fetch the logs ---
-            # This query is fast because 'logs' is a hypertable!
-            sql_logs = """
-            SELECT 
-                timestamp, 
-                agent_id,
-                hostname, 
-                raw_data->>'MESSAGE' as message,
-                COALESCE(raw_data->>'PRIORITY', '6') as severity,
-                COALESCE(raw_data->>'SYSLOG_FACILITY', '1') as facility,
-                COALESCE(raw_data->>'SYSLOG_IDENTIFIER', raw_data->>'_COMM', '') as process_name
-            FROM logs
-            WHERE agent_id = $1 AND timestamp >= $2
-            ORDER BY timestamp DESC
-            LIMIT $3
-            """
-            log_records = await conn.fetch(sql_logs, agent_id, start_time, limit)
+            if agent_id:
+                # Specific device requested - verify access
+                if user.role == UserRole.OWNER:
+                    # Owner can access all devices
+                    device_check = await conn.fetchrow(
+                        "SELECT id FROM devices WHERE agent_id = $1", agent_id
+                    )
+                elif user.role == UserRole.ADMIN:
+                    # Admin can access devices they own OR are assigned to
+                    device_check = await conn.fetchrow(
+                        """
+                        SELECT d.id FROM devices d
+                        LEFT JOIN device_assignments da ON d.id = da.device_id
+                        WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                        """,
+                        agent_id, user.id
+                    )
+                else:
+                    # Device User can only access their own devices
+                    device_check = await conn.fetchrow(
+                        "SELECT id FROM devices WHERE agent_id = $1 AND user_id = $2",
+                        agent_id, user.id
+                    )
+                
+                if not device_check:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Access forbidden: You do not have access to this device",
+                    )
+                
+                # Fetch logs for specific device
+                sql_logs = """
+                SELECT 
+                    timestamp, 
+                    agent_id,
+                    hostname, 
+                    raw_data->>'MESSAGE' as message,
+                    COALESCE(raw_data->>'PRIORITY', '6') as severity,
+                    COALESCE(raw_data->>'SYSLOG_FACILITY', '1') as facility,
+                    COALESCE(raw_data->>'SYSLOG_IDENTIFIER', raw_data->>'_COMM', '') as process_name
+                FROM logs
+                WHERE agent_id = $1 AND timestamp >= $2
+                ORDER BY timestamp DESC
+                LIMIT $3
+                """
+                log_records = await conn.fetch(sql_logs, agent_id, start_time, limit)
+            else:
+                # No specific device - get logs from all accessible devices
+                if user.role == UserRole.OWNER:
+                    # Owner sees all logs
+                    sql_logs = """
+                    SELECT 
+                        timestamp, 
+                        agent_id,
+                        hostname, 
+                        raw_data->>'MESSAGE' as message,
+                        COALESCE(raw_data->>'PRIORITY', '6') as severity,
+                        COALESCE(raw_data->>'SYSLOG_FACILITY', '1') as facility,
+                        COALESCE(raw_data->>'SYSLOG_IDENTIFIER', raw_data->>'_COMM', '') as process_name
+                    FROM logs
+                    WHERE timestamp >= $1
+                    ORDER BY timestamp DESC
+                    LIMIT $2
+                    """
+                    log_records = await conn.fetch(sql_logs, start_time, limit)
+                elif user.role == UserRole.ADMIN:
+                    # Admin sees logs from owned devices + assigned devices
+                    sql_logs = """
+                    SELECT 
+                        l.timestamp, 
+                        l.agent_id,
+                        l.hostname, 
+                        l.raw_data->>'MESSAGE' as message,
+                        COALESCE(l.raw_data->>'PRIORITY', '6') as severity,
+                        COALESCE(l.raw_data->>'SYSLOG_FACILITY', '1') as facility,
+                        COALESCE(l.raw_data->>'SYSLOG_IDENTIFIER', l.raw_data->>'_COMM', '') as process_name
+                    FROM logs l
+                    INNER JOIN devices d ON l.agent_id = d.agent_id
+                    LEFT JOIN device_assignments da ON d.id = da.device_id
+                    WHERE l.timestamp >= $1 AND (d.user_id = $2 OR da.user_id = $2)
+                    ORDER BY l.timestamp DESC
+                    LIMIT $3
+                    """
+                    log_records = await conn.fetch(sql_logs, start_time, user.id, limit)
+                else:
+                    # Device User sees only their own device logs
+                    sql_logs = """
+                    SELECT 
+                        l.timestamp, 
+                        l.agent_id,
+                        l.hostname, 
+                        l.raw_data->>'MESSAGE' as message,
+                        COALESCE(l.raw_data->>'PRIORITY', '6') as severity,
+                        COALESCE(l.raw_data->>'SYSLOG_FACILITY', '1') as facility,
+                        COALESCE(l.raw_data->>'SYSLOG_IDENTIFIER', l.raw_data->>'_COMM', '') as process_name
+                    FROM logs l
+                    INNER JOIN devices d ON l.agent_id = d.agent_id
+                    WHERE l.timestamp >= $1 AND d.user_id = $2
+                    ORDER BY l.timestamp DESC
+                    LIMIT $3
+                    """
+                    log_records = await conn.fetch(sql_logs, start_time, user.id, limit)
             
             # Convert records to a list of dicts for JSON response
             logs = []
@@ -95,6 +180,10 @@ async def get_logs_for_agent(
                 })
             return logs
             
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error fetching logs: {e}")
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Failed to fetch logs")

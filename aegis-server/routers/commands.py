@@ -203,15 +203,35 @@ async def get_commands(
             
             # Build query based on filters
             if agent_id:
-                # Verify user owns this device
-                device_check = await conn.fetchrow(
-                    "SELECT id FROM devices WHERE user_id = $1 AND agent_id = $2",
-                    user.id, agent_id
-                )
+                # Verify user has access to this device (owner, assigned, or owns it)
+                from models.models import UserRole
+                
+                if user.role == UserRole.OWNER:
+                    # Owner can access all devices
+                    device_check = await conn.fetchrow(
+                        "SELECT id FROM devices WHERE agent_id = $1", agent_id
+                    )
+                elif user.role == UserRole.ADMIN:
+                    # Admin can access devices they own OR are assigned to
+                    device_check = await conn.fetchrow(
+                        """
+                        SELECT d.id FROM devices d
+                        LEFT JOIN device_assignments da ON d.id = da.device_id
+                        WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                        """,
+                        agent_id, user.id
+                    )
+                else:
+                    # Device User can only access their own devices
+                    device_check = await conn.fetchrow(
+                        "SELECT id FROM devices WHERE agent_id = $1 AND user_id = $2",
+                        agent_id, user.id
+                    )
+                
                 if not device_check:
                     raise HTTPException(
                         status_code=403,
-                        detail="Access forbidden: You do not own this device"
+                        detail="Access forbidden: You do not have access to this device"
                     )
                 
                 # Fetch commands for specific device
@@ -232,27 +252,72 @@ async def get_commands(
                     """
                     records = await conn.fetch(sql, agent_id, limit)
             else:
-                # Fetch commands for all user's devices
-                if user_name:
-                    sql = """
-                    SELECT c.*
-                    FROM commands c
-                    LEFT JOIN devices d ON c.agent_id = d.agent_id
-                    WHERE d.user_id = $1 AND c.user_name = $2
-                    ORDER BY c.timestamp DESC
-                    LIMIT $3
-                    """
-                    records = await conn.fetch(sql, user.id, user_name, limit)
+                # Fetch commands for all accessible devices
+                from models.models import UserRole
+                
+                if user.role == UserRole.OWNER:
+                    # Owner sees all commands
+                    if user_name:
+                        sql = """
+                        SELECT * FROM commands
+                        WHERE user_name = $1
+                        ORDER BY timestamp DESC
+                        LIMIT $2
+                        """
+                        records = await conn.fetch(sql, user_name, limit)
+                    else:
+                        sql = """
+                        SELECT * FROM commands
+                        ORDER BY timestamp DESC
+                        LIMIT $1
+                        """
+                        records = await conn.fetch(sql, limit)
+                elif user.role == UserRole.ADMIN:
+                    # Admin sees commands from owned devices + assigned devices
+                    if user_name:
+                        sql = """
+                        SELECT c.*
+                        FROM commands c
+                        INNER JOIN devices d ON c.agent_id = d.agent_id
+                        LEFT JOIN device_assignments da ON d.id = da.device_id
+                        WHERE (d.user_id = $1 OR da.user_id = $1) AND c.user_name = $2
+                        ORDER BY c.timestamp DESC
+                        LIMIT $3
+                        """
+                        records = await conn.fetch(sql, user.id, user_name, limit)
+                    else:
+                        sql = """
+                        SELECT c.*
+                        FROM commands c
+                        INNER JOIN devices d ON c.agent_id = d.agent_id
+                        LEFT JOIN device_assignments da ON d.id = da.device_id
+                        WHERE d.user_id = $1 OR da.user_id = $1
+                        ORDER BY c.timestamp DESC
+                        LIMIT $2
+                        """
+                        records = await conn.fetch(sql, user.id, limit)
                 else:
-                    sql = """
-                    SELECT c.*
-                    FROM commands c
-                    LEFT JOIN devices d ON c.agent_id = d.agent_id
-                    WHERE d.user_id = $1
-                    ORDER BY c.timestamp DESC
-                    LIMIT $2
-                    """
-                    records = await conn.fetch(sql, user.id, limit)
+                    # Device User sees only their own device commands
+                    if user_name:
+                        sql = """
+                        SELECT c.*
+                        FROM commands c
+                        LEFT JOIN devices d ON c.agent_id = d.agent_id
+                        WHERE d.user_id = $1 AND c.user_name = $2
+                        ORDER BY c.timestamp DESC
+                        LIMIT $3
+                        """
+                        records = await conn.fetch(sql, user.id, user_name, limit)
+                    else:
+                        sql = """
+                        SELECT c.*
+                        FROM commands c
+                        LEFT JOIN devices d ON c.agent_id = d.agent_id
+                        WHERE d.user_id = $1
+                        ORDER BY c.timestamp DESC
+                        LIMIT $2
+                        """
+                        records = await conn.fetch(sql, user.id, limit)
             
             # Convert to response models
             commands = []

@@ -32,14 +32,24 @@ const LogsPage: React.FC = () => {
     const fetchLogs = async () => {
       try {
         setLoading(true);
-        const params: any = { limit: 100 };
+        const params: any = { limit: 100, timeframe: "24h" };
+
+        // If deviceId is provided, add it to params (device-specific logs)
+        // If not provided, backend will return logs from all accessible devices (general logs)
         if (deviceId) {
           params.agent_id = deviceId;
         }
+
         const response = await api.get(`/api/query/logs`, { params });
         setLogs(response.data.reverse()); // Reverse to show oldest first
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch logs:", error);
+        // Show more detailed error to user
+        if (error.response?.status === 403) {
+          console.error(
+            "Access forbidden - you may not have permission to view these logs"
+          );
+        }
       } finally {
         setLoading(false);
       }
