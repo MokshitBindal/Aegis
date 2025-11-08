@@ -127,7 +127,10 @@ export default function UserManagementPage() {
         <div className="bg-red-900 text-white p-4 rounded-md">
           <p className="font-bold">Access Denied</p>
           <p>You don't have permission to access this page.</p>
-          <Link to="/" className="text-blue-300 hover:underline mt-2 inline-block">
+          <Link
+            to="/"
+            className="text-blue-300 hover:underline mt-2 inline-block"
+          >
             ← Back to Dashboard
           </Link>
         </div>
@@ -161,17 +164,29 @@ export default function UserManagementPage() {
             <table className="w-full">
               <thead className="bg-gray-900">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Email</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Role</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Status</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Last Login</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Actions</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
+                    Email
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
+                    Role
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
+                    Last Login
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
                 {users.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-750">
-                    <td className="px-4 py-3 text-sm text-white">{user.email}</td>
+                    <td className="px-4 py-3 text-sm text-white">
+                      {user.email}
+                    </td>
                     <td className="px-4 py-3 text-sm">
                       <span
                         className={`px-2 py-1 text-xs font-bold rounded ${
@@ -209,7 +224,9 @@ export default function UserManagementPage() {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDeleteUser(user.id, user.email)}
+                            onClick={() =>
+                              handleDeleteUser(user.id, user.email)
+                            }
                             disabled={actionLoading}
                             className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs disabled:bg-gray-600"
                           >
@@ -233,7 +250,9 @@ export default function UserManagementPage() {
             <h2 className="text-xl font-bold mb-4">Create New User</h2>
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Email *</label>
+                <label className="block text-sm font-medium mb-1">
+                  Email *
+                </label>
                 <input
                   type="email"
                   value={newUserEmail}
@@ -244,7 +263,9 @@ export default function UserManagementPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Password *</label>
+                <label className="block text-sm font-medium mb-1">
+                  Password *
+                </label>
                 <input
                   type="password"
                   value={newUserPassword}
@@ -291,7 +312,9 @@ export default function UserManagementPage() {
       {showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Edit User: {selectedUser.email}</h2>
+            <h2 className="text-xl font-bold mb-4">
+              Edit User: {selectedUser.email}
+            </h2>
             <form onSubmit={handleUpdateUser} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Role *</label>

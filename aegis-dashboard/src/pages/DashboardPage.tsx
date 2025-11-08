@@ -110,8 +110,15 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold">Aegis Dashboard</h1>
           {userInfo && (
             <p className="text-sm text-gray-400 mt-1">
-              Logged in as <span className="font-medium text-gray-300">{userInfo.email}</span>
-              {" "}(<span className="capitalize">{userInfo.role.replace('_', ' ')}</span>)
+              Logged in as{" "}
+              <span className="font-medium text-gray-300">
+                {userInfo.email}
+              </span>{" "}
+              (
+              <span className="capitalize">
+                {userInfo.role.replace("_", " ")}
+              </span>
+              )
             </p>
           )}
         </div>

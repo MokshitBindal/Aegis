@@ -22,6 +22,7 @@ from routers import (
     incidents,
     ingest,
     metrics,
+    processes,
     query,
     user_management,
     websocket,
@@ -37,6 +38,23 @@ async def lifespan(app: FastAPI):
     global background_task, aggregation_task, cleanup_task
     print("Server starting up...")
     await init_db_pool()
+    
+    # Clean up old invitation tokens with invalid hash format
+    from internal.storage.postgres import get_db_pool
+    try:
+        pool = get_db_pool()
+        async with pool.acquire() as conn:
+            # Delete invitations older than 7 days (likely have old hash format)
+            from datetime import datetime, timedelta, UTC
+            week_ago = datetime.now(UTC) - timedelta(days=7)
+            result = await conn.execute(
+                "DELETE FROM invitations WHERE expires_at < $1",
+                week_ago
+            )
+            if result != "DELETE 0":
+                print(f"Cleaned up old invitation tokens: {result}")
+    except Exception as e:
+        print(f"Warning: Could not clean old invitations: {e}")
     
     # --- START BACKGROUND TASKS ---
     print("Starting background analysis task...")
@@ -107,6 +125,7 @@ app.include_router(metrics.router, prefix="/api")
 app.include_router(agent_alerts.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
 app.include_router(commands.router, prefix="/api")
+app.include_router(processes.router)
 
 @app.get("/")
 async def root():

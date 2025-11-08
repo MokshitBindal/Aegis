@@ -34,10 +34,13 @@ export default function AlertTriagePage() {
   const [myAssignments, setMyAssignments] = useState<AlertAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"unassigned" | "my-assignments">("unassigned");
+  const [activeTab, setActiveTab] = useState<"unassigned" | "my-assignments">(
+    "unassigned"
+  );
 
   // Modal states
-  const [selectedAssignment, setSelectedAssignment] = useState<AlertAssignment | null>(null);
+  const [selectedAssignment, setSelectedAssignment] =
+    useState<AlertAssignment | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showEscalateModal, setShowEscalateModal] = useState(false);
   const [notes, setNotes] = useState("");
@@ -78,7 +81,7 @@ export default function AlertTriagePage() {
 
   const handleClaimAlert = async (alertId: number) => {
     if (!isAdmin) return;
-    
+
     setActionLoading(true);
     try {
       await api.post(`/api/alerts/${alertId}/claim`);
@@ -153,7 +156,10 @@ export default function AlertTriagePage() {
         <div className="bg-red-900 text-white p-4 rounded-md">
           <p className="font-bold">Access Denied</p>
           <p>You don't have permission to access this page.</p>
-          <Link to="/" className="text-blue-300 hover:underline mt-2 inline-block">
+          <Link
+            to="/"
+            className="text-blue-300 hover:underline mt-2 inline-block"
+          >
             ← Back to Dashboard
           </Link>
         </div>
@@ -226,12 +232,19 @@ export default function AlertTriagePage() {
                         >
                           {alert.severity.toUpperCase()}
                         </span>
-                        <span className="text-sm text-gray-400">{alert.alert_type}</span>
+                        <span className="text-sm text-gray-400">
+                          {alert.alert_type}
+                        </span>
                       </div>
-                      <p className="text-white font-medium mb-1">{alert.message}</p>
+                      <p className="text-white font-medium mb-1">
+                        {alert.message}
+                      </p>
                       <div className="text-sm text-gray-400">
                         <p>Agent ID: {alert.agent_id}</p>
-                        <p>Triggered: {new Date(alert.triggered_at).toLocaleString()}</p>
+                        <p>
+                          Triggered:{" "}
+                          {new Date(alert.triggered_at).toLocaleString()}
+                        </p>
                       </div>
                     </div>
                     {isAdmin && (
@@ -275,7 +288,9 @@ export default function AlertTriagePage() {
                       </span>
                       {assignment.resolution && (
                         <span className="ml-2 px-2 py-1 text-xs bg-gray-700 rounded">
-                          {assignment.resolution.replace("_", " ").toUpperCase()}
+                          {assignment.resolution
+                            .replace("_", " ")
+                            .toUpperCase()}
                         </span>
                       )}
                     </div>
@@ -284,30 +299,35 @@ export default function AlertTriagePage() {
                     </p>
                   </div>
                   <p className="text-sm text-gray-300 mb-2">
-                    Assigned: {new Date(assignment.assigned_at).toLocaleString()}
+                    Assigned:{" "}
+                    {new Date(assignment.assigned_at).toLocaleString()}
                   </p>
                   {assignment.notes && (
                     <div className="bg-gray-900 p-3 rounded-md mb-3">
                       <p className="text-xs text-gray-400 mb-1">Notes:</p>
-                      <p className="text-sm text-gray-300 whitespace-pre-wrap">{assignment.notes}</p>
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {assignment.notes}
+                      </p>
                     </div>
                   )}
-                  {isAdmin && assignment.status !== "resolved" && assignment.status !== "escalated" && (
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        onClick={() => handleOpenUpdateModal(assignment)}
-                        className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-                      >
-                        Update Status
-                      </button>
-                      <button
-                        onClick={() => handleOpenEscalateModal(assignment)}
-                        className="px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
-                      >
-                        Escalate to Owner
-                      </button>
-                    </div>
-                  )}
+                  {isAdmin &&
+                    assignment.status !== "resolved" &&
+                    assignment.status !== "escalated" && (
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => handleOpenUpdateModal(assignment)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                        >
+                          Update Status
+                        </button>
+                        <button
+                          onClick={() => handleOpenEscalateModal(assignment)}
+                          className="px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                        >
+                          Escalate to Owner
+                        </button>
+                      </div>
+                    )}
                 </div>
               ))
             )}
@@ -334,7 +354,9 @@ export default function AlertTriagePage() {
               </div>
               {status === "resolved" && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Resolution</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Resolution
+                  </label>
                   <select
                     value={resolution}
                     onChange={(e) => setResolution(e.target.value)}
@@ -384,7 +406,9 @@ export default function AlertTriagePage() {
             <h2 className="text-xl font-bold mb-4">Escalate to Owner</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Escalation Notes *</label>
+                <label className="block text-sm font-medium mb-1">
+                  Escalation Notes *
+                </label>
                 <textarea
                   value={escalationNotes}
                   onChange={(e) => setEscalationNotes(e.target.value)}
@@ -395,7 +419,8 @@ export default function AlertTriagePage() {
                 />
               </div>
               <p className="text-sm text-gray-400">
-                This alert will be flagged for the Owner to review. The Owner will receive notification.
+                This alert will be flagged for the Owner to review. The Owner
+                will receive notification.
               </p>
             </div>
             <div className="flex gap-2 mt-6">

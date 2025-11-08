@@ -242,6 +242,61 @@ def run_agent(args):
         )
         command_thread.start()
         print("Command collector thread started.")
+    
+    # --- Initialize Process Monitor ---
+    process_monitor = None
+    process_thread = None
+    try:
+        from internal.collector.process_monitor import ProcessMonitor
+        
+        process_monitor = ProcessMonitor()
+        print("Process monitor initialized.")
+        
+        def run_process_collection():
+            """Process collection loop - runs every 60 seconds."""
+            while True:
+                try:
+                    # Collect processes
+                    processes = process_monitor.collect_running_processes()
+                    
+                    # Store in local database
+                    if processes:
+                        args.storage.store_processes(processes, str(args.agent_id))
+                        print(f"Stored {len(processes)} processes in local database")
+                    
+                    # Detect anomalies
+                    anomalies = process_monitor.detect_anomalies(processes)
+                    if anomalies and analysis_engine:
+                        for anomaly in anomalies:
+                            # Generate alert for each anomaly
+                            alert = {
+                                'rule_name': f"Process Anomaly: {anomaly['type']}",
+                                'severity': anomaly['severity'],
+                                'details': anomaly,
+                                'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                                'agent_id': str(args.agent_id)
+                            }
+                            args.storage.store_alert(alert)
+                            print(f"⚠️  ALERT: {alert['rule_name']} - {anomaly.get('name', 'N/A')}")
+                    
+                except Exception as e:
+                    print(f"Error in process collection: {e}")
+                
+                time.sleep(60)  # Collect processes every 60 seconds
+        
+        process_thread = threading.Thread(
+            target=run_process_collection,
+            daemon=True
+        )
+        process_thread.start()
+        print("Process monitor thread started.")
+        
+    except ImportError as e:
+        print(f"Warning: Could not initialize process monitor: {e}")
+        process_monitor = None
+    except Exception as e:
+        print(f"Error starting process monitor: {e}")
+        process_monitor = None
 
     # --- MODIFICATION: Start Forwarder ---
     forwarder.start()

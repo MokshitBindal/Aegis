@@ -193,3 +193,47 @@ class UserUpdate(BaseModel):
     """
     role: UserRole | None = None
     is_active: bool | None = None
+
+class DeviceAssignment(BaseModel):
+    """
+    Model for assigning a device to a user (admin or device_user).
+    """
+    device_id: int
+    user_id: int
+
+
+# --- Process Monitoring Models ---
+
+class ConnectionDetail(BaseModel):
+    """
+    Model for network connection details per process.
+    """
+    family: str
+    type: str
+    laddr: str | None = None
+    raddr: str | None = None
+    status: str
+
+class ProcessData(BaseModel):
+    """
+    Model for process information collected by agents.
+    Used for AI/ML behavioral anomaly detection.
+    """
+    pid: int
+    name: str
+    exe: str | None = None
+    cmdline: str | None = None
+    username: str | None = None
+    status: str | None = None
+    create_time: str | None = None
+    ppid: int | None = None
+    cpu_percent: float | None = None
+    memory_percent: float | None = None
+    memory_rss: int | None = None
+    memory_vms: int | None = None
+    num_threads: int | None = None
+    num_fds: int | None = None
+    num_connections: int | None = None
+    connection_details: list[ConnectionDetail] = []
+    agent_id: uuid.UUID
+    collected_at: str

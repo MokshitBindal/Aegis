@@ -92,10 +92,15 @@ async def register_device(
             
             valid_invite = None
             for invite in invites:
-                # 2. Verify the token (This is where the fix is)
-                if verify_password(token, invite['token_hash']):
-                    valid_invite = invite
-                    break
+                # 2. Verify the token - returns False if hash is invalid
+                try:
+                    if verify_password(token, invite['token_hash']):
+                        valid_invite = invite
+                        break
+                except Exception as e:
+                    # Skip this invitation if verification fails (e.g., wrong hash format)
+                    print(f"Skipping invitation {invite['id']}: {e}")
+                    continue
                     
             if not valid_invite:
                 raise HTTPException(
@@ -128,7 +133,9 @@ async def register_device(
             status_code=400, detail="This agent UUID is already registered."
         )
     except Exception as e:
+        import traceback
         print(f"Error during device registration: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Registration failed: {e}")
     
 
@@ -161,3 +168,151 @@ async def list_devices(
     except Exception as e:
         print(f"Error listing devices: {e}")
         raise HTTPException(status_code=500, detail="Failed to list devices")
+
+
+@router.post("/device/assign")
+async def assign_device(
+    device_id: int,
+    user_id: int,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """
+    Assign a device to a specific user (admin or device_user).
+    Only Owner can assign devices.
+    
+    **Args:**
+        device_id: ID of the device to assign
+        user_id: ID of the user to assign the device to
+    
+    **Returns:**
+        Success message with assignment details
+    """
+    # Only Owner can assign devices
+    if current_user.role != UserRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Owner can assign devices to users"
+        )
+    
+    pool = get_db_pool()
+    try:
+        async with pool.acquire() as conn:
+            # Check if device exists
+            device = await conn.fetchrow(
+                "SELECT * FROM devices WHERE id = $1",
+                device_id
+            )
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found")
+            
+            # Check if user exists
+            user = await conn.fetchrow(
+                "SELECT * FROM users WHERE id = $1",
+                user_id
+            )
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Update device ownership
+            await conn.execute(
+                "UPDATE devices SET user_id = $1 WHERE id = $2",
+                user_id,
+                device_id
+            )
+            
+            return {
+                "message": "Device assigned successfully",
+                "device_id": device_id,
+                "device_name": device["name"],
+                "user_id": user_id,
+                "user_email": user["email"]
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error assigning device: {e}")
+        raise HTTPException(status_code=500, detail="Failed to assign device")
+
+
+@router.get("/device/unassigned")
+async def get_unassigned_devices(
+    current_user: TokenData = Depends(get_current_user)
+):
+    """
+    Get all devices that are not assigned to any user.
+    Only Owner can view unassigned devices.
+    
+    **Returns:**
+        List of unassigned devices
+    """
+    # Only Owner can view unassigned devices
+    if current_user.role != UserRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Owner can view unassigned devices"
+        )
+    
+    pool = get_db_pool()
+    try:
+        async with pool.acquire() as conn:
+            devices = await conn.fetch(
+                "SELECT * FROM devices WHERE user_id IS NULL ORDER BY registered_at DESC"
+            )
+            return [Device.model_validate(dict(record)) for record in devices]
+    
+    except Exception as e:
+        print(f"Error fetching unassigned devices: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch unassigned devices")
+
+
+@router.delete("/device/{device_id}/unassign")
+async def unassign_device(
+    device_id: int,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """
+    Unassign a device from its current user.
+    Only Owner can unassign devices.
+    
+    **Args:**
+        device_id: ID of the device to unassign
+    
+    **Returns:**
+        Success message
+    """
+    # Only Owner can unassign devices
+    if current_user.role != UserRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Owner can unassign devices"
+        )
+    
+    pool = get_db_pool()
+    try:
+        async with pool.acquire() as conn:
+            # Check if device exists
+            device = await conn.fetchrow(
+                "SELECT * FROM devices WHERE id = $1",
+                device_id
+            )
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found")
+            
+            # Unassign device
+            await conn.execute(
+                "UPDATE devices SET user_id = NULL WHERE id = $1",
+                device_id
+            )
+            
+            return {
+                "message": "Device unassigned successfully",
+                "device_id": device_id,
+                "device_name": device["name"]
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error unassigning device: {e}")
+        raise HTTPException(status_code=500, detail="Failed to unassign device")

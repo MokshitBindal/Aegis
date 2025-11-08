@@ -1,0 +1,331 @@
+"""
+Process Data Ingestion Router
+
+This router handles incoming process data from agents.
+Process data is used for AI/ML behavioral anomaly detection.
+"""
+
+import logging
+from datetime import datetime
+from typing import List
+from uuid import UUID
+
+from fastapi import APIRouter, Header, HTTPException
+
+from internal.storage.postgres import get_db_pool
+from models.models import ProcessData
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/processes", tags=["processes"])
+
+
+@router.post("")
+async def ingest_processes(
+    processes: List[ProcessData],
+    x_aegis_agent_id: str = Header(..., description="Agent UUID"),
+):
+    """
+    Ingest process data from an agent.
+    
+    This endpoint receives process information collected by the agent,
+    including process details, resource usage, and network connections.
+    
+    **Args:**
+        processes: List of process data dictionaries
+        x_aegis_agent_id: Agent UUID from header
+    
+    **Returns:**
+        Success message with count of stored processes
+    """
+    if not processes:
+        return {"message": "No processes to ingest"}
+    
+    logger.info(f"Received {len(processes)} processes from agent {x_aegis_agent_id}")
+    
+    # Validate agent_id format
+    try:
+        agent_uuid = UUID(x_aegis_agent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid agent_id format")
+    
+    pool = get_db_pool()
+    
+    try:
+        async with pool.acquire() as conn:
+            # Prepare bulk insert
+            import json
+            records = []
+            for proc in processes:
+                # Convert connection details to JSON string for JSONB
+                connection_details = json.dumps([
+                    {
+                        "family": conn.family,
+                        "type": conn.type,
+                        "laddr": conn.laddr,
+                        "raddr": conn.raddr,
+                        "status": conn.status,
+                    }
+                    for conn in proc.connection_details
+                ])
+                
+                # Parse datetime strings to datetime objects
+                create_time = None
+                if proc.create_time:
+                    try:
+                        create_time = datetime.fromisoformat(proc.create_time.replace('Z', '+00:00'))
+                    except (ValueError, AttributeError):
+                        create_time = None
+                
+                collected_at = None
+                if proc.collected_at:
+                    try:
+                        collected_at = datetime.fromisoformat(proc.collected_at.replace('Z', '+00:00'))
+                    except (ValueError, AttributeError):
+                        collected_at = datetime.now()
+                
+                records.append((
+                    str(proc.agent_id),
+                    proc.pid,
+                    proc.name,
+                    proc.exe,
+                    proc.cmdline,
+                    proc.username,
+                    proc.status,
+                    create_time,
+                    proc.ppid,
+                    proc.cpu_percent,
+                    proc.memory_percent,
+                    proc.memory_rss,
+                    proc.memory_vms,
+                    proc.num_threads,
+                    proc.num_fds,
+                    proc.num_connections,
+                    connection_details,  # Will be converted to JSONB
+                    collected_at,
+                ))
+            
+            # Bulk insert using COPY for performance
+            await conn.copy_records_to_table(
+                "processes",
+                records=records,
+                columns=[
+                    "agent_id",
+                    "pid",
+                    "name",
+                    "exe",
+                    "cmdline",
+                    "username",
+                    "status",
+                    "create_time",
+                    "ppid",
+                    "cpu_percent",
+                    "memory_percent",
+                    "memory_rss",
+                    "memory_vms",
+                    "num_threads",
+                    "num_fds",
+                    "num_connections",
+                    "connection_details",
+                    "collected_at",
+                ],
+            )
+            
+            logger.info(f"Successfully stored {len(records)} processes for agent {x_aegis_agent_id}")
+    
+    except Exception as e:
+        logger.error(f"Error storing processes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to store processes: {str(e)}")
+    
+    return {"message": f"Successfully stored {len(processes)} processes"}
+
+
+@router.get("/{agent_id}")
+async def get_processes(
+    agent_id: UUID,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """
+    Get process data for a specific agent.
+    
+    **Args:**
+        agent_id: Agent UUID
+        limit: Maximum number of processes to return
+        offset: Pagination offset
+    
+    **Returns:**
+        List of process data
+    """
+    pool = get_db_pool()
+    
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM processes
+                WHERE agent_id = $1
+                ORDER BY collected_at DESC
+                LIMIT $2 OFFSET $3
+                """,
+                str(agent_id),
+                limit,
+                offset,
+            )
+            
+            # Convert rows to dictionaries
+            processes = [dict(row) for row in rows]
+            
+            return {
+                "agent_id": str(agent_id),
+                "count": len(processes),
+                "processes": processes,
+            }
+    
+    except Exception as e:
+        logger.error(f"Error retrieving processes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve processes: {str(e)}")
+
+
+@router.get("/{agent_id}/latest")
+async def get_latest_processes(
+    agent_id: UUID,
+):
+    """
+    Get the most recent process snapshot for an agent.
+    
+    Returns all processes from the latest collection cycle.
+    
+    **Args:**
+        agent_id: Agent UUID
+    
+    **Returns:**
+        Latest process snapshot
+    """
+    pool = get_db_pool()
+    
+    try:
+        async with pool.acquire() as conn:
+            # Get the latest collection timestamp
+            latest_time = await conn.fetchval(
+                """
+                SELECT MAX(collected_at) FROM processes
+                WHERE agent_id = $1
+                """,
+                str(agent_id),
+            )
+            
+            if not latest_time:
+                return {
+                    "agent_id": str(agent_id),
+                    "collected_at": None,
+                    "count": 0,
+                    "processes": [],
+                }
+            
+            # Get all processes from that timestamp
+            rows = await conn.fetch(
+                """
+                SELECT * FROM processes
+                WHERE agent_id = $1 AND collected_at = $2
+                ORDER BY pid
+                """,
+                str(agent_id),
+                latest_time,
+            )
+            
+            processes = [dict(row) for row in rows]
+            
+            return {
+                "agent_id": str(agent_id),
+                "collected_at": latest_time,
+                "count": len(processes),
+                "processes": processes,
+            }
+    
+    except Exception as e:
+        logger.error(f"Error retrieving latest processes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve latest processes: {str(e)}")
+
+
+@router.get("/{agent_id}/summary")
+async def get_process_summary(
+    agent_id: UUID,
+):
+    """
+    Get aggregated process statistics for an agent.
+    
+    **Args:**
+        agent_id: Agent UUID
+    
+    **Returns:**
+        Process statistics summary
+    """
+    pool = get_db_pool()
+    
+    try:
+        async with pool.acquire() as conn:
+            # Get latest processes
+            latest_time = await conn.fetchval(
+                """
+                SELECT MAX(collected_at) FROM processes
+                WHERE agent_id = $1
+                """,
+                str(agent_id),
+            )
+            
+            if not latest_time:
+                return {
+                    "agent_id": str(agent_id),
+                    "error": "No process data available",
+                }
+            
+            # Aggregate statistics
+            stats = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) as total_processes,
+                    SUM(num_threads) as total_threads,
+                    SUM(num_connections) as total_connections,
+                    AVG(cpu_percent) as avg_cpu,
+                    AVG(memory_percent) as avg_memory,
+                    SUM(memory_rss) as total_memory_rss
+                FROM processes
+                WHERE agent_id = $1 AND collected_at = $2
+                """,
+                str(agent_id),
+                latest_time,
+            )
+            
+            # Get process count by user
+            by_user = await conn.fetch(
+                """
+                SELECT username, COUNT(*) as count
+                FROM processes
+                WHERE agent_id = $1 AND collected_at = $2
+                GROUP BY username
+                ORDER BY count DESC
+                LIMIT 10
+                """,
+                str(agent_id),
+                latest_time,
+            )
+            
+            return {
+                "agent_id": str(agent_id),
+                "collected_at": latest_time,
+                "total_processes": stats["total_processes"],
+                "total_threads": stats["total_threads"],
+                "total_connections": stats["total_connections"],
+                "avg_cpu_percent": round(float(stats["avg_cpu"] or 0), 2),
+                "avg_memory_percent": round(float(stats["avg_memory"] or 0), 2),
+                "total_memory_rss_mb": round((stats["total_memory_rss"] or 0) / 1024 / 1024, 2),
+                "processes_by_user": [
+                    {"username": row["username"], "count": row["count"]}
+                    for row in by_user
+                ],
+            }
+    
+    except Exception as e:
+        logger.error(f"Error retrieving process summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve process summary: {str(e)}")

@@ -82,12 +82,39 @@ class Storage:
         );
         """
         
+        # Process monitoring data
+        processes_schema = """
+        CREATE TABLE IF NOT EXISTS processes (
+            id                  INTEGER PRIMARY KEY,
+            pid                 INTEGER NOT NULL,
+            name                TEXT NOT NULL,
+            exe                 TEXT,
+            cmdline             TEXT,
+            username            TEXT,
+            status              TEXT,
+            create_time         TEXT,
+            ppid                INTEGER,
+            cpu_percent         REAL,
+            memory_percent      REAL,
+            memory_rss          INTEGER,
+            memory_vms          INTEGER,
+            num_threads         INTEGER,
+            num_fds             INTEGER,
+            num_connections     INTEGER,
+            connection_details  TEXT,
+            agent_id            TEXT NOT NULL,
+            collected_at        TEXT NOT NULL,
+            forwarded           INTEGER DEFAULT 0
+        );
+        """
+        
         try:
             with self.lock:
                 self.conn.execute(logs_schema)
                 self.conn.execute(alerts_schema)
                 self.conn.execute(commands_schema)
                 self.conn.execute(sync_state_schema)
+                self.conn.execute(processes_schema)
                 self.conn.commit()
             print("Database schema verified.")
         except Exception as e:
@@ -365,3 +392,101 @@ class Storage:
                 self.conn.commit()
         except Exception as e:
             print(f"Error setting last command sync timestamp: {e}")
+    
+    # --- PROCESS STORAGE METHODS ---
+    
+    def store_processes(self, processes: list[dict], agent_id: str):
+        """
+        Stores a batch of process data in the database.
+        
+        Args:
+            processes (List[dict]): List of process information dictionaries
+            agent_id (str): Agent ID for tracking
+        """
+        sql = """
+        INSERT INTO processes (
+            pid, name, exe, cmdline, username, status, create_time, ppid,
+            cpu_percent, memory_percent, memory_rss, memory_vms,
+            num_threads, num_fds, num_connections, connection_details,
+            agent_id, collected_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        collected_at = datetime.now().isoformat()
+        
+        try:
+            with self.lock:
+                for proc in processes:
+                    params = (
+                        proc.get('pid'),
+                        proc.get('name'),
+                        proc.get('exe'),
+                        proc.get('cmdline'),
+                        proc.get('username'),
+                        proc.get('status'),
+                        proc.get('create_time'),
+                        proc.get('ppid'),
+                        proc.get('cpu_percent'),
+                        proc.get('memory_percent'),
+                        proc.get('memory_rss'),
+                        proc.get('memory_vms'),
+                        proc.get('num_threads'),
+                        proc.get('num_fds'),
+                        proc.get('num_connections'),
+                        json.dumps(proc.get('connection_details', [])),
+                        agent_id,
+                        collected_at
+                    )
+                    self.conn.execute(sql, params)
+                self.conn.commit()
+        except Exception as e:
+            print(f"Error writing processes to SQLite: {e}")
+    
+    def get_pending_processes(self, batch_size: int = 100) -> list[dict[str, Any]]:
+        """
+        Retrieves processes that haven't been forwarded to the server yet.
+        
+        Args:
+            batch_size (int): Maximum number of process records to retrieve.
+            
+        Returns:
+            List[Dict[str, Any]]: List of process records as dictionaries.
+        """
+        sql = "SELECT * FROM processes WHERE forwarded = 0 LIMIT ?"
+        
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(sql, (batch_size,))
+                rows = [dict(row) for row in cursor.fetchall()]
+                # Parse the connection_details JSON string back to list
+                for row in rows:
+                    try:
+                        row['connection_details'] = json.loads(row['connection_details'])
+                    except (json.JSONDecodeError, KeyError):
+                        row['connection_details'] = []
+                return rows
+        except Exception as e:
+            print(f"Error reading pending processes: {e}")
+            return []
+    
+    def mark_processes_forwarded(self, process_ids: list[int]):
+        """
+        Marks processes as forwarded to the server.
+        
+        Args:
+            process_ids (List[int]): List of process primary keys to mark.
+        """
+        if not process_ids:
+            return
+            
+        placeholders = ', '.join('?' * len(process_ids))
+        sql = f"UPDATE processes SET forwarded = 1 WHERE id IN ({placeholders})"
+        
+        try:
+            with self.lock:
+                self.conn.execute(sql, process_ids)
+                self.conn.commit()
+        except Exception as e:
+            print(f"Error marking processes as forwarded: {e}")

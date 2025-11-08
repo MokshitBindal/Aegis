@@ -134,6 +134,9 @@ class Forwarder:
                 
                 # Forward commands if available
                 self.forward_commands()
+                
+                # Forward processes
+                self.forward_processes()
             except Exception as e:
                 print(f"Error in forwarder run loop: {e}")
 
@@ -346,6 +349,64 @@ class Forwarder:
                 )
         except Exception as e:
             print(f"Error forwarding commands: {e}")
+    def forward_processes(self):
+        """
+        Forwards pending process data to the server.
+        """
+        try:
+            # Get pending processes from storage
+            processes = self.storage.get_pending_processes(batch_size=100)
+            
+            if not processes:
+                return
+            
+            print(f"Found {len(processes)} processes to forward")
+            
+            # Prepare payload
+            payload = []
+            process_ids = []
+            
+            for proc in processes:
+                payload.append({
+                    "pid": proc.get("pid"),
+                    "name": proc.get("name"),
+                    "exe": proc.get("exe"),
+                    "cmdline": proc.get("cmdline"),
+                    "username": proc.get("username"),
+                    "status": proc.get("status"),
+                    "create_time": proc.get("create_time"),
+                    "ppid": proc.get("ppid"),
+                    "cpu_percent": proc.get("cpu_percent"),
+                    "memory_percent": proc.get("memory_percent"),
+                    "memory_rss": proc.get("memory_rss"),
+                    "memory_vms": proc.get("memory_vms"),
+                    "num_threads": proc.get("num_threads"),
+                    "num_fds": proc.get("num_fds"),
+                    "num_connections": proc.get("num_connections"),
+                    "connection_details": proc.get("connection_details", []),
+                    "agent_id": proc.get("agent_id"),
+                    "collected_at": proc.get("collected_at"),
+                })
+                process_ids.append(proc["id"])
+            
+            # Send to server
+            processes_url = f"{self.server_base}/api/processes"
+            response = requests.post(
+                processes_url, json=payload, headers=self.headers, timeout=10
+            )
+            
+            if response.status_code == 200:
+                print(f"Successfully forwarded {len(processes)} processes")
+                # Mark as forwarded
+                self.storage.mark_processes_forwarded(process_ids)
+            else:
+                print(
+                    f"Failed to forward processes: "
+                    f"{response.status_code} {response.text}"
+                )
+        except Exception as e:
+            print(f"Error forwarding processes: {e}")
+    
     def send_status(self, status: str):
         """
         Sends agent status (online/offline) to the server.
