@@ -95,7 +95,8 @@ const DeviceManagementPage: React.FC = () => {
     } catch (err: any) {
       console.error("Failed to assign device:", err);
       alert(
-        err.response?.data?.detail || "Failed to assign device. Please try again."
+        err.response?.data?.detail ||
+          "Failed to assign device. Please try again."
       );
     } finally {
       setActionLoading(false);
@@ -149,7 +150,9 @@ const DeviceManagementPage: React.FC = () => {
     return (
       <div className="container mx-auto p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <h2 className="text-2xl font-bold text-red-800 mb-2">Access Denied</h2>
+          <h2 className="text-2xl font-bold text-red-800 mb-2">
+            Access Denied
+          </h2>
           <p className="text-red-600">
             Only Owners can access device management.
           </p>
@@ -338,7 +341,9 @@ const DeviceManagementPage: React.FC = () => {
                             d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                           />
                         </svg>
-                        <p className="text-sm">No users assigned to this device</p>
+                        <p className="text-sm">
+                          No users assigned to this device
+                        </p>
                         <p className="text-xs text-gray-400 mt-1">
                           Use the form above to assign users
                         </p>

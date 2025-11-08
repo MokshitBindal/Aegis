@@ -279,6 +279,13 @@ export default function DashboardPage() {
                             >
                               Alerts
                             </Link>
+                            <Link
+                              to={`/processes/${device.agent_id}`}
+                              className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Processes
+                            </Link>
                           </div>
 
                           {/* Status Badge */}

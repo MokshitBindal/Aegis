@@ -16,14 +16,15 @@ from routers.device import get_user_by_email
 router = APIRouter()
 
 # Define the allowed timeframes
-Timeframe = Literal["1h", "6h", "24h", "7d"]
+Timeframe = Literal["1h", "6h", "24h", "7d", "30d", "6months"]
 
 @router.get("/query/logs")
 async def get_logs_for_agent(
     request: Request,
     agent_id: uuid.UUID = Query(None), # Optional agent_id - None means all devices
-    timeframe: Timeframe = Query("24h"), # Default to 24h
-    limit: int = Query(1000, le=5000), # Default 1000, max 5000
+    timeframe: Timeframe = Query(None), # Optional timeframe
+    since: str = Query(None), # Optional: ISO timestamp to fetch logs since
+    limit: int = Query(1000, le=50000), # Default 1000, max 50000 for historical data
     current_user: TokenData = Depends(get_current_user)
 ):
     """
@@ -38,16 +39,27 @@ async def get_logs_for_agent(
     """
     pool = get_db_pool()
     
-    # Map our timeframe strings to timedelta objects
-    time_deltas = {
-        "1h": timedelta(hours=1),
-        "6h": timedelta(hours=6),
-        "24h": timedelta(hours=24),
-        "7d": timedelta(days=7),
-    }
-    
-    # Calculate the start time
-    start_time = datetime.now(UTC) - time_deltas[timeframe]
+    # Determine start time based on 'since' or 'timeframe'
+    if since:
+        # Use explicit timestamp if provided
+        try:
+            start_time = datetime.fromisoformat(since.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid 'since' timestamp format")
+    elif timeframe:
+        # Map our timeframe strings to timedelta objects
+        time_deltas = {
+            "1h": timedelta(hours=1),
+            "6h": timedelta(hours=6),
+            "24h": timedelta(hours=24),
+            "7d": timedelta(days=7),
+            "30d": timedelta(days=30),
+            "6months": timedelta(days=180),
+        }
+        start_time = datetime.now(UTC) - time_deltas[timeframe]
+    else:
+        # Default to 24h if neither provided
+        start_time = datetime.now(UTC) - timedelta(hours=24)
     
     try:
         async with pool.acquire() as conn:

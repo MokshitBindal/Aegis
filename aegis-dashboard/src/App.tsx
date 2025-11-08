@@ -10,6 +10,7 @@ import LogsPage from "./pages/LogsPage";
 import CommandsPage from "./pages/CommandsPage";
 import AlertTriagePage from "./pages/AlertTriagePage";
 import UserManagementPage from "./pages/UserManagementPage";
+import ProcessesPage from "./pages/ProcessesPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -111,6 +112,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <UserManagementPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/processes/:deviceId"
+        element={
+          <ProtectedRoute>
+            <ProcessesPage />
           </ProtectedRoute>
         }
       />

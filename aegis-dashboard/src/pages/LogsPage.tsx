@@ -16,7 +16,20 @@ interface LogEntry {
 
 const LogsPage: React.FC = () => {
   const { deviceId } = useParams<{ deviceId: string }>();
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  // Cache key for localStorage (persistent across sessions)
+  const cacheKey = deviceId ? `logs_${deviceId}` : "logs_all";
+  const lastFetchKey = `${cacheKey}_lastFetch`;
+
+  // Initialize state from localStorage if available
+  const [logs, setLogs] = useState<LogEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -24,27 +37,88 @@ const LogsPage: React.FC = () => {
   const [hostnameFilter, setHostnameFilter] = useState<string>("all");
   const [processFilter, setProcessFilter] = useState<string>("all");
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<string>(() => {
+    return localStorage.getItem(lastFetchKey) || "";
+  });
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch historical logs on mount
+  // Fetch and merge new logs
   useEffect(() => {
     const fetchLogs = async () => {
       try {
+        // Get the last fetch timestamp to only fetch new logs
+        const lastFetch = localStorage.getItem(lastFetchKey);
+        const cachedLogs = logs.length; // Check if we already have logs loaded
+
+        // If we have cached logs and a recent fetch, skip initial large query
+        if (cachedLogs > 0 && lastFetch) {
+          const lastFetchTime = new Date(lastFetch);
+          const timeSinceLastFetch = Date.now() - lastFetchTime.getTime();
+
+          // Skip if last fetch was less than 5 seconds ago (prevent rapid refetches)
+          if (timeSinceLastFetch < 5000) {
+            console.log("Skipping fetch - already fetched recently");
+            setLoading(false);
+            return;
+          }
+        }
+
         setLoading(true);
-        const params: any = { limit: 100, timeframe: "24h" };
+
+        const params: any = {};
+
+        // If we have a last fetch time, only get logs since then (incremental)
+        if (lastFetch) {
+          params.since = lastFetch;
+          params.limit = 1000; // Smaller limit for incremental updates
+        } else if (cachedLogs === 0) {
+          // First time EVER: fetch recent logs only (not 6 months!)
+          params.timeframe = "24h"; // Start with just 24 hours
+          params.limit = 1000;
+        } else {
+          // Have cache but no lastFetch timestamp - just fetch recent
+          params.timeframe = "1h";
+          params.limit = 500;
+        }
 
         // If deviceId is provided, add it to params (device-specific logs)
-        // If not provided, backend will return logs from all accessible devices (general logs)
         if (deviceId) {
           params.agent_id = deviceId;
         }
 
         const response = await api.get(`/api/query/logs`, { params });
-        setLogs(response.data.reverse()); // Reverse to show oldest first
+        const fetchedLogs = response.data.reverse(); // Oldest first
+
+        if (fetchedLogs.length > 0) {
+          setLogs((prevLogs) => {
+            // Merge with existing logs, avoiding duplicates by ID
+            const existingIds = new Set(prevLogs.map((log) => log.id));
+            const newLogs = fetchedLogs.filter(
+              (log: LogEntry) => !existingIds.has(log.id)
+            );
+            const mergedLogs = [...prevLogs, ...newLogs];
+
+            // Keep only last 10000 logs to prevent memory/performance issues
+            const recentLogs = mergedLogs.slice(-10000);
+
+            // Cache in localStorage
+            localStorage.setItem(cacheKey, JSON.stringify(recentLogs));
+            return recentLogs;
+          });
+
+          // Update last fetch timestamp
+          const now = new Date().toISOString();
+          localStorage.setItem(lastFetchKey, now);
+          setLastUpdate(now);
+        } else {
+          // No new logs, just update timestamp
+          const now = new Date().toISOString();
+          localStorage.setItem(lastFetchKey, now);
+          setLastUpdate(now);
+        }
       } catch (error: any) {
         console.error("Failed to fetch logs:", error);
-        // Show more detailed error to user
         if (error.response?.status === 403) {
           console.error(
             "Access forbidden - you may not have permission to view these logs"
@@ -56,7 +130,11 @@ const LogsPage: React.FC = () => {
     };
 
     fetchLogs();
-  }, [deviceId]);
+
+    // Fetch new logs every 30 seconds
+    const interval = setInterval(fetchLogs, 30000);
+    return () => clearInterval(interval);
+  }, [deviceId, cacheKey, lastFetchKey, logs.length]);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
@@ -73,9 +151,21 @@ const LogsPage: React.FC = () => {
       // Only add logs for the current device (or all if no device selected)
       if (!deviceId || logEntry.agent_id === deviceId) {
         setLogs((prev) => {
-          // Limit to last 500 logs to prevent memory issues
+          // Check if log already exists (avoid duplicates)
+          if (prev.some((log) => log.id === logEntry.id)) {
+            return prev;
+          }
+
+          // Append new log
           const newLogs = [...prev, logEntry];
-          return newLogs.slice(-500);
+
+          // Keep only last 10000 logs (reasonable limit for performance)
+          const recentLogs = newLogs.slice(-10000);
+
+          // Update cache with accumulated logs
+          localStorage.setItem(cacheKey, JSON.stringify(recentLogs));
+
+          return recentLogs;
         });
       }
     }
@@ -187,6 +277,8 @@ const LogsPage: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900">Live Logs</h1>
             <p className="text-sm text-gray-500 mt-1">
               {deviceId ? `Device: ${deviceId}` : "All Devices"}
+              {lastUpdate &&
+                ` • Last updated: ${new Date(lastUpdate).toLocaleTimeString()}`}
             </p>
           </div>
 
@@ -276,10 +368,37 @@ const LogsPage: React.FC = () => {
               </span>
             </label>
 
-            {/* Log Count */}
-            <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-md text-sm font-medium">
-              {filteredLogs.length} logs
+            {/* Log Count with Warning */}
+            <div
+              className={`px-3 py-2 rounded-md text-sm font-medium ${
+                logs.length >= 9000
+                  ? "bg-yellow-50 text-yellow-700"
+                  : "bg-blue-50 text-blue-700"
+              }`}
+            >
+              {filteredLogs.length} / {logs.length} logs
+              {logs.length >= 9000 && " (near limit!)"}
             </div>
+
+            {/* Clear Cache Button */}
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Clear all ${logs.length} cached logs? This will remove accumulated log history.`
+                  )
+                ) {
+                  localStorage.removeItem(cacheKey);
+                  localStorage.removeItem(lastFetchKey);
+                  setLogs([]);
+                  window.location.reload();
+                }
+              }}
+              className="px-3 py-2 bg-red-50 text-red-700 rounded-md text-sm font-medium hover:bg-red-100 transition-colors"
+              title="Clear accumulated logs and start fresh"
+            >
+              Clear Cache
+            </button>
           </div>
         </div>
       </div>

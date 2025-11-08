@@ -150,15 +150,17 @@ export default function UserManagementPage() {
   const handleOpenDeviceModal = async (user: User) => {
     setSelectedUser(user);
     setShowDeviceModal(true);
-    
+
     // Fetch assignments for this user
     try {
       // Get all assignments for each device and filter by user
-      const assignmentPromises = devices.map(device =>
-        api.get(`/api/device/${device.id}/assignments`).catch(() => ({ data: { assignments: [] } }))
+      const assignmentPromises = devices.map((device) =>
+        api
+          .get(`/api/device/${device.id}/assignments`)
+          .catch(() => ({ data: { assignments: [] } }))
       );
       const assignmentResults = await Promise.all(assignmentPromises);
-      
+
       // Filter assignments for the selected user
       const userDeviceAssignments: Assignment[] = [];
       assignmentResults.forEach((result) => {
@@ -167,7 +169,7 @@ export default function UserManagementPage() {
         );
         userDeviceAssignments.push(...deviceAssignments);
       });
-      
+
       setUserAssignments(userDeviceAssignments);
     } catch (err) {
       console.error("Failed to fetch assignments:", err);
@@ -180,7 +182,9 @@ export default function UserManagementPage() {
 
     try {
       setActionLoading(true);
-      await api.post(`/api/device/assign?device_id=${deviceId}&user_id=${selectedUser.id}`);
+      await api.post(
+        `/api/device/assign?device_id=${deviceId}&user_id=${selectedUser.id}`
+      );
       alert("Device assigned successfully!");
       await handleOpenDeviceModal(selectedUser); // Refresh assignments
     } catch (err: any) {
@@ -194,11 +198,14 @@ export default function UserManagementPage() {
   const handleUnassignDevice = async (deviceId: number) => {
     if (!selectedUser) return;
 
-    if (!confirm("Are you sure you want to remove this device assignment?")) return;
+    if (!confirm("Are you sure you want to remove this device assignment?"))
+      return;
 
     try {
       setActionLoading(true);
-      await api.delete(`/api/device/${deviceId}/unassign?user_id=${selectedUser.id}`);
+      await api.delete(
+        `/api/device/${deviceId}/unassign?user_id=${selectedUser.id}`
+      );
       alert("Device unassigned successfully!");
       await handleOpenDeviceModal(selectedUser); // Refresh assignments
     } catch (err: any) {
@@ -511,7 +518,9 @@ export default function UserManagementPage() {
                   />
                 </svg>
                 <p className="font-medium">No devices available</p>
-                <p className="text-sm mt-1">Register devices to assign them to users</p>
+                <p className="text-sm mt-1">
+                  Register devices to assign them to users
+                </p>
               </div>
             ) : (
               <div className="space-y-2 mt-4">

@@ -10,10 +10,12 @@ from datetime import datetime
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
+from internal.auth.jwt import get_current_user
 from internal.storage.postgres import get_db_pool
-from models.models import ProcessData
+from models.models import ProcessData, TokenData, UserRole
+from routers.device import get_user_by_email
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +147,7 @@ async def get_processes(
     agent_id: UUID,
     limit: int = 100,
     offset: int = 0,
+    current_user: TokenData = Depends(get_current_user),
 ):
     """
     Get process data for a specific agent.
@@ -161,6 +164,39 @@ async def get_processes(
     
     try:
         async with pool.acquire() as conn:
+            # Verify user has access to this device
+            user = await get_user_by_email(current_user.email, conn)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            if user.role == UserRole.OWNER:
+                # Owner can access all devices
+                device_check = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1", str(agent_id)
+                )
+            elif user.role == UserRole.ADMIN:
+                # Admin can access devices they own OR are assigned to
+                device_check = await conn.fetchrow(
+                    """
+                    SELECT 1 FROM devices d
+                    LEFT JOIN device_assignments da ON d.id = da.device_id
+                    WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                    """,
+                    str(agent_id), user.id
+                )
+            else:
+                # Device User can only access their own devices
+                device_check = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1 AND user_id = $2",
+                    str(agent_id), user.id
+                )
+            
+            if not device_check:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access forbidden: You do not have access to this device"
+                )
+            
             rows = await conn.fetch(
                 """
                 SELECT * FROM processes
@@ -190,6 +226,7 @@ async def get_processes(
 @router.get("/{agent_id}/latest")
 async def get_latest_processes(
     agent_id: UUID,
+    current_user: TokenData = Depends(get_current_user),
 ):
     """
     Get the most recent process snapshot for an agent.
@@ -206,6 +243,36 @@ async def get_latest_processes(
     
     try:
         async with pool.acquire() as conn:
+            # Verify user has access to this device
+            user = await get_user_by_email(current_user.email, conn)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            if user.role == UserRole.OWNER:
+                device_check = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1", str(agent_id)
+                )
+            elif user.role == UserRole.ADMIN:
+                device_check = await conn.fetchrow(
+                    """
+                    SELECT 1 FROM devices d
+                    LEFT JOIN device_assignments da ON d.id = da.device_id
+                    WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                    """,
+                    str(agent_id), user.id
+                )
+            else:
+                device_check = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1 AND user_id = $2",
+                    str(agent_id), user.id
+                )
+            
+            if not device_check:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access forbidden: You do not have access to this device"
+                )
+            
             # Get the latest collection timestamp
             latest_time = await conn.fetchval(
                 """
@@ -251,6 +318,7 @@ async def get_latest_processes(
 @router.get("/{agent_id}/summary")
 async def get_process_summary(
     agent_id: UUID,
+    current_user: TokenData = Depends(get_current_user),
 ):
     """
     Get aggregated process statistics for an agent.
@@ -265,6 +333,36 @@ async def get_process_summary(
     
     try:
         async with pool.acquire() as conn:
+            # Verify user has access to this device
+            user = await get_user_by_email(current_user.email, conn)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            if user.role == UserRole.OWNER:
+                device_check = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1", str(agent_id)
+                )
+            elif user.role == UserRole.ADMIN:
+                device_check = await conn.fetchrow(
+                    """
+                    SELECT 1 FROM devices d
+                    LEFT JOIN device_assignments da ON d.id = da.device_id
+                    WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                    """,
+                    str(agent_id), user.id
+                )
+            else:
+                device_check = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1 AND user_id = $2",
+                    str(agent_id), user.id
+                )
+            
+            if not device_check:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access forbidden: You do not have access to this device"
+                )
+            
             # Get latest processes
             latest_time = await conn.fetchval(
                 """
