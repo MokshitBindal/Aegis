@@ -16,6 +16,7 @@ from routers import (
     alerts,
     alert_triage,
     auth,
+    baselines,
     commands,
     device,
     device_status,
@@ -114,6 +115,7 @@ app.add_middleware(
 # --- Include Routers ---
 app.include_router(ingest.router, prefix="/api")
 app.include_router(auth.router, prefix="/auth")
+app.include_router(baselines.router, prefix="/api")
 app.include_router(device.router, prefix="/api")
 app.include_router(device_status.router, prefix="/api")
 app.include_router(websocket.router)

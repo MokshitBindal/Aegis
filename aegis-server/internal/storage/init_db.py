@@ -105,6 +105,29 @@ async def init_db():
         CREATE INDEX IF NOT EXISTS idx_commands_created ON commands(created_at DESC);
         ''')
         
+        # Create device_baselines table for AI/ML behavioral learning
+        await conn.execute('''
+        CREATE TABLE IF NOT EXISTS device_baselines (
+            id BIGSERIAL PRIMARY KEY,
+            device_id UUID NOT NULL REFERENCES devices(agent_id) ON DELETE CASCADE,
+            baseline_type VARCHAR(50) NOT NULL,
+            baseline_data JSONB NOT NULL,
+            learned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            duration_days INTEGER NOT NULL,
+            version INTEGER DEFAULT 1,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(device_id, baseline_type, version)
+        );
+        ''')
+        
+        # Create indexes for baselines
+        await conn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_baselines_device ON device_baselines(device_id);
+        CREATE INDEX IF NOT EXISTS idx_baselines_type ON device_baselines(baseline_type);
+        CREATE INDEX IF NOT EXISTS idx_baselines_learned ON device_baselines(learned_at DESC);
+        ''')
+        
         await conn.close()
         print("Database schema initialized successfully.")
         

@@ -237,3 +237,20 @@ class ProcessData(BaseModel):
     connection_details: list[ConnectionDetail] = []
     agent_id: uuid.UUID
     collected_at: str
+
+
+# --- Baseline Learning Models ---
+
+class DeviceBaseline(BaseModel):
+    """
+    Pydantic model for storing learned behavioral baselines for a device.
+    Used by the AI model for anomaly detection.
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    device_id: uuid.UUID
+    baseline_type: str  # 'process', 'metrics', 'activity', 'command', 'full'
+    baseline_data: dict  # JSONB data containing statistical profiles
+    learned_at: datetime
+    duration_days: int  # How many days of data was analyzed
+    version: int = 1  # For tracking baseline updates
