@@ -32,7 +32,8 @@ class MetricsCollector:
         # Store previous network and disk I/O values for rate calculation
         self._prev_net_io = None
         self._prev_disk_io = None
-        self._prev_time = None
+        self._prev_net_time = None
+        self._prev_disk_time = None
         
     def collect_cpu_metrics(self) -> dict[str, Any]:
         """Collect CPU-related metrics"""
@@ -71,16 +72,17 @@ class MetricsCollector:
         disk_read_rate = 0
         disk_write_rate = 0
         
-        if io and self._prev_disk_io and self._prev_time:
-            time_delta = current_time - self._prev_time
-            if time_delta > 0:
+        if io and self._prev_disk_io and self._prev_disk_time:
+            time_delta = current_time - self._prev_disk_time
+            # Only calculate if time delta is reasonable (at least 30 seconds)
+            if time_delta >= 30:
                 disk_read_rate = int((io.read_bytes - self._prev_disk_io.read_bytes) / time_delta)
                 disk_write_rate = int((io.write_bytes - self._prev_disk_io.write_bytes) / time_delta)
         
         # Store current values for next calculation
         if io:
             self._prev_disk_io = io
-        self._prev_time = current_time
+        self._prev_disk_time = current_time
         
         return {
             "disk_total": int(disk.total),
@@ -106,15 +108,16 @@ class MetricsCollector:
         bytes_sent_rate = 0
         bytes_recv_rate = 0
         
-        if self._prev_net_io and self._prev_time:
-            time_delta = current_time - self._prev_time
-            if time_delta > 0:
+        if self._prev_net_io and self._prev_net_time:
+            time_delta = current_time - self._prev_net_time
+            # Only calculate if time delta is reasonable (at least 30 seconds)
+            if time_delta >= 30:
                 bytes_sent_rate = int((net.bytes_sent - self._prev_net_io.bytes_sent) / time_delta)
                 bytes_recv_rate = int((net.bytes_recv - self._prev_net_io.bytes_recv) / time_delta)
         
         # Store current values for next calculation
         self._prev_net_io = net
-        self._prev_time = current_time
+        self._prev_net_time = current_time
         
         return {
             "net_bytes_sent": int(net.bytes_sent),
