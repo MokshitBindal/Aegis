@@ -69,7 +69,7 @@ const ProcessesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUser, setFilterUser] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatus] = useState("all"); // No setter needed - status filter not implemented in UI
   const [sortBy, setSortBy] = useState<"cpu" | "memory" | "pid" | "name">(
     "cpu"
   );
