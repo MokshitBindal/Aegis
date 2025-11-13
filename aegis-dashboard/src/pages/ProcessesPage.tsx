@@ -30,8 +30,13 @@ interface ProcessSummary {
   total_processes: number;
   total_threads: number;
   total_connections: number;
+  cpu_count: number;
+  system_cpu_percent?: number;
   avg_cpu_percent: number;
+  total_cpu_percent: number;
+  cpu_utilization_percent: number;
   avg_memory_percent: number;
+  total_memory_percent: number;
   total_memory_rss_mb: number;
   processes_by_user: Array<{ username: string; count: number }>;
 }
@@ -233,26 +238,44 @@ const ProcessesPage: React.FC = () => {
               </div>
               <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                 <div className="text-sm font-medium text-gray-600">
-                  Avg CPU Usage
+                  CPU Utilization
                 </div>
                 <div className="text-3xl font-bold text-blue-600 mt-2">
-                  {summary.avg_cpu_percent.toFixed(1)}%
+                  {summary.system_cpu_percent !== undefined
+                    ? summary.system_cpu_percent.toFixed(1)
+                    : summary.cpu_utilization_percent?.toFixed(1) || "0.0"}
+                  %
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {summary.cpu_count || 0} cores
+                  {summary.system_cpu_percent !== undefined &&
+                    ` • System metric`}
+                  {summary.system_cpu_percent === undefined &&
+                    ` • ${
+                      summary.total_cpu_percent?.toFixed(1) || "0.0"
+                    }% from processes`}
                 </div>
               </div>
               <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                 <div className="text-sm font-medium text-gray-600">
-                  Avg Memory
+                  Total Memory Usage
                 </div>
                 <div className="text-3xl font-bold text-green-600 mt-2">
-                  {summary.avg_memory_percent.toFixed(1)}%
+                  {summary.total_memory_percent?.toFixed(1) || "0.0"}%
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Avg: {summary.avg_memory_percent.toFixed(1)}% per process
                 </div>
               </div>
               <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                 <div className="text-sm font-medium text-gray-600">
-                  Total Memory
+                  Total Memory RSS
                 </div>
                 <div className="text-3xl font-bold text-purple-600 mt-2">
                   {summary.total_memory_rss_mb.toFixed(0)} MB
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {(summary.total_memory_rss_mb / 1024).toFixed(1)} GB
                 </div>
               </div>
             </div>

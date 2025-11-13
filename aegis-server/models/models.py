@@ -12,12 +12,10 @@ class UserRole(str, Enum):
     """
     Enum for user roles in the RBAC system.
     owner: Super admin, can create admins and manage all resources
-    admin: SOC analyst, can claim and triage alerts
-    device_user: Standard user, can view only their own devices
+    admin: SOC analyst, can claim and triage alerts, manage devices
     """
     OWNER = "owner"
     ADMIN = "admin"
-    DEVICE_USER = "device_user"
 
 class AssignmentStatus(str, Enum):
     """
@@ -71,7 +69,7 @@ class UserInDB(BaseModel):
     """
     id: int
     email: EmailStr
-    role: UserRole = UserRole.DEVICE_USER
+    role: UserRole = UserRole.ADMIN
     is_active: bool = True
     created_by: int | None = None
     last_login: datetime | None = None

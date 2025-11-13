@@ -21,7 +21,7 @@ export default function DeviceDetailsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<Timeframe>("24h");
+  const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [selectedLog, setSelectedLog] = useState<Log | null>(null);
 
   useEffect(() => {

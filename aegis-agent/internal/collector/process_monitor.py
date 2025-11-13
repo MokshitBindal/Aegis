@@ -56,7 +56,8 @@ class ProcessMonitor:
                     'ppid': proc.ppid(),
                     
                     # Resource usage
-                    'cpu_percent': proc.cpu_percent(interval=0.1),
+                    # Use cached CPU percent if available, otherwise get current (may be 0.0 on first call)
+                    'cpu_percent': proc.cpu_percent(interval=None),  # Non-blocking, uses cached value
                     'memory_percent': proc.memory_percent(),
                     'memory_rss': proc.memory_info().rss,
                     'memory_vms': proc.memory_info().vms,
@@ -111,12 +112,26 @@ class ProcessMonitor:
         logger.info("Starting process collection...")
         start_time = time.time()
 
+        # First pass: Initialize CPU tracking for all processes
+        procs_to_collect = []
         for proc in psutil.process_iter(['pid']):
+            try:
+                # Initialize CPU percent tracking (first call returns 0.0)
+                proc.cpu_percent(interval=None)
+                procs_to_collect.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Wait a bit to get meaningful CPU measurements
+        time.sleep(0.5)
+        
+        # Second pass: Collect actual data with valid CPU percentages
+        for proc in procs_to_collect:
             try:
                 pid = proc.pid
                 current_pids.add(pid)
                 
-                # Get detailed process info
+                # Get detailed process info (now with accurate CPU data)
                 pinfo = self.get_process_info(proc)
                 if pinfo:
                     processes.append(pinfo)

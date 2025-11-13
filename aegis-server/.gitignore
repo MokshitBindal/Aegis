@@ -12,3 +12,7 @@ __pycache__/
 # IDE files
 .idea/
 .vscode/
+
+# ML data exports (CSV files)
+ml_data/
+*.csv

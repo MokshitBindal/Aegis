@@ -11,6 +11,7 @@ import CommandsPage from "./pages/CommandsPage";
 import AlertTriagePage from "./pages/AlertTriagePage";
 import UserManagementPage from "./pages/UserManagementPage";
 import ProcessesPage from "./pages/ProcessesPage";
+import MLDataPage from "./pages/MLDataPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -120,6 +121,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ProcessesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ml-data"
+        element={
+          <ProtectedRoute>
+            <MLDataPage />
           </ProtectedRoute>
         }
       />

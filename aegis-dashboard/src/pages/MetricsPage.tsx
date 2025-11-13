@@ -81,9 +81,9 @@ const NetworkTooltip = ({ active, payload, label }: any) => {
           >
             {entry.name}:{" "}
             {typeof entry.value === "number"
-              ? (entry.value / 1024 / 1024).toFixed(2)
+              ? entry.value.toFixed(2)
               : entry.value}{" "}
-            MB
+            KB/s
           </p>
         ))}
       </div>
@@ -108,8 +108,15 @@ const MetricsPage: React.FC = () => {
           cpu: m.cpu.cpu_percent,
           memory: m.memory.memory_percent,
           disk: m.disk.disk_percent,
-          network_in: m.network.net_bytes_recv,
-          network_out: m.network.net_bytes_sent,
+          // Use rates (KB/s) if available, otherwise fall back to cumulative MB
+          network_in:
+            m.network.net_bytes_recv_rate !== undefined
+              ? m.network.net_bytes_recv_rate / 1024 // Convert to KB/s
+              : m.network.net_bytes_recv / 1024 / 1024, // MB
+          network_out:
+            m.network.net_bytes_sent_rate !== undefined
+              ? m.network.net_bytes_sent_rate / 1024 // Convert to KB/s
+              : m.network.net_bytes_sent / 1024 / 1024, // MB
         }));
         setMetricsHistory(series);
 
@@ -138,8 +145,15 @@ const MetricsPage: React.FC = () => {
           cpu: metrics.cpu.cpu_percent,
           memory: metrics.memory.memory_percent,
           disk: metrics.disk.disk_percent,
-          network_in: metrics.network.net_bytes_recv,
-          network_out: metrics.network.net_bytes_sent,
+          // Use rates (KB/s) if available, otherwise fall back to cumulative MB
+          network_in:
+            metrics.network.net_bytes_recv_rate !== undefined
+              ? metrics.network.net_bytes_recv_rate / 1024 // Convert to KB/s
+              : metrics.network.net_bytes_recv / 1024 / 1024, // MB
+          network_out:
+            metrics.network.net_bytes_sent_rate !== undefined
+              ? metrics.network.net_bytes_sent_rate / 1024 // Convert to KB/s
+              : metrics.network.net_bytes_sent / 1024 / 1024, // MB
         };
 
         // Keep last 60 points (1 hour at 1 point/minute)
@@ -183,12 +197,28 @@ const MetricsPage: React.FC = () => {
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="text-gray-500">Network I/O</h3>
-            <p className="text-sm text-gray-900">
-              ↑ {(lastMetrics.network.net_bytes_sent / 1024 / 1024).toFixed(2)}{" "}
-              MB
-              <br />↓{" "}
-              {(lastMetrics.network.net_bytes_recv / 1024 / 1024).toFixed(2)} MB
-            </p>
+            {lastMetrics.network.net_bytes_sent_rate !== undefined ? (
+              <p className="text-sm text-gray-900">
+                ↑ {(lastMetrics.network.net_bytes_sent_rate / 1024).toFixed(2)}{" "}
+                KB/s
+                <br />↓{" "}
+                {(lastMetrics.network.net_bytes_recv_rate / 1024).toFixed(
+                  2
+                )}{" "}
+                KB/s
+              </p>
+            ) : (
+              <p className="text-sm text-gray-900">
+                ↑{" "}
+                {(lastMetrics.network.net_bytes_sent / 1024 / 1024).toFixed(2)}{" "}
+                MB
+                <br />↓{" "}
+                {(lastMetrics.network.net_bytes_recv / 1024 / 1024).toFixed(
+                  2
+                )}{" "}
+                MB
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -332,7 +362,7 @@ const MetricsPage: React.FC = () => {
 
         {/* Network Chart */}
         <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="text-gray-500 mb-4">Network I/O Over Time</h3>
+          <h3 className="text-gray-500 mb-4">Network I/O Rate (KB/s)</h3>
           <div className="h-64">
             {metricsHistory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">

@@ -443,22 +443,26 @@ class Storage:
         except Exception as e:
             print(f"Error writing processes to SQLite: {e}")
     
-    def get_pending_processes(self, batch_size: int = 100) -> list[dict[str, Any]]:
+    def get_pending_processes(self, batch_size: int = None) -> list[dict[str, Any]]:
         """
-        Retrieves processes that haven't been forwarded to the server yet.
+        Retrieves ALL processes that haven't been forwarded to the server yet.
+        
+        Process snapshots should be sent as complete sets, not partial batches.
+        This ensures the server receives the full process list from each collection cycle.
         
         Args:
-            batch_size (int): Maximum number of process records to retrieve.
+            batch_size (int): DEPRECATED - Not used. Kept for backward compatibility.
             
         Returns:
-            List[Dict[str, Any]]: List of process records as dictionaries.
+            List[Dict[str, Any]]: List of ALL unforwarded process records.
         """
-        sql = "SELECT * FROM processes WHERE forwarded = 0 LIMIT ?"
+        # Get ALL unforwarded processes (no LIMIT)
+        sql = "SELECT * FROM processes WHERE forwarded = 0"
         
         try:
             with self.lock:
                 cursor = self.conn.cursor()
-                cursor.execute(sql, (batch_size,))
+                cursor.execute(sql)
                 rows = [dict(row) for row in cursor.fetchall()]
                 # Parse the connection_details JSON string back to list
                 for row in rows:
@@ -473,7 +477,7 @@ class Storage:
     
     def mark_processes_forwarded(self, process_ids: list[int]):
         """
-        Marks processes as forwarded to the server.
+        Marks processes as forwarded to the server and cleans up old forwarded records.
         
         Args:
             process_ids (List[int]): List of process primary keys to mark.
@@ -487,6 +491,20 @@ class Storage:
         try:
             with self.lock:
                 self.conn.execute(sql, process_ids)
+                
+                # Clean up old forwarded processes to prevent database bloat
+                # Keep only last 1000 forwarded processes for reference
+                cleanup_sql = """
+                    DELETE FROM processes 
+                    WHERE forwarded = 1 
+                    AND id NOT IN (
+                        SELECT id FROM processes 
+                        WHERE forwarded = 1 
+                        ORDER BY id DESC 
+                        LIMIT 1000
+                    )
+                """
+                self.conn.execute(cleanup_sql)
                 self.conn.commit()
         except Exception as e:
             print(f"Error marking processes as forwarded: {e}")

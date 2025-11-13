@@ -107,7 +107,74 @@ async def ingest_processes(
                     collected_at,
                 ))
             
-            # Bulk insert using COPY for performance
+            # DUAL STORAGE STRATEGY:
+            # 1. processes_history: Keep ALL snapshots for ML training
+            # 2. processes: Keep only latest snapshot for live dashboard
+            
+            # First, store in history table for ML (create if not exists)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS processes_history (
+                    id BIGSERIAL PRIMARY KEY,
+                    agent_id UUID NOT NULL,
+                    pid INTEGER NOT NULL,
+                    name TEXT,
+                    exe TEXT,
+                    cmdline TEXT,
+                    username TEXT,
+                    status TEXT,
+                    create_time TIMESTAMP WITH TIME ZONE,
+                    ppid INTEGER,
+                    cpu_percent REAL,
+                    memory_percent REAL,
+                    memory_rss BIGINT,
+                    memory_vms BIGINT,
+                    num_threads INTEGER,
+                    num_fds INTEGER,
+                    num_connections INTEGER,
+                    connection_details JSONB,
+                    collected_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                )
+            """)
+            
+            # Create index for efficient querying
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_processes_history_agent_time 
+                ON processes_history(agent_id, collected_at DESC)
+            """)
+            
+            # Insert into history table (keeps all snapshots)
+            await conn.copy_records_to_table(
+                "processes_history",
+                records=records,
+                columns=[
+                    "agent_id",
+                    "pid",
+                    "name",
+                    "exe",
+                    "cmdline",
+                    "username",
+                    "status",
+                    "create_time",
+                    "ppid",
+                    "cpu_percent",
+                    "memory_percent",
+                    "memory_rss",
+                    "memory_vms",
+                    "num_threads",
+                    "num_fds",
+                    "num_connections",
+                    "connection_details",
+                    "collected_at",
+                ],
+            )
+            
+            # Delete old snapshot from live table
+            await conn.execute(
+                "DELETE FROM processes WHERE agent_id = $1",
+                str(agent_uuid)
+            )
+            
+            # Insert into live table (only latest snapshot)
             await conn.copy_records_to_table(
                 "processes",
                 records=records,
@@ -197,11 +264,13 @@ async def get_processes(
                     detail="Access forbidden: You do not have access to this device"
                 )
             
+            # Get processes (only latest snapshot kept in DB - like htop)
+            # Old snapshots are deleted on each new ingestion
             rows = await conn.fetch(
                 """
                 SELECT * FROM processes
                 WHERE agent_id = $1
-                ORDER BY collected_at DESC
+                ORDER BY cpu_percent DESC, memory_percent DESC
                 LIMIT $2 OFFSET $3
                 """,
                 str(agent_id),
@@ -378,6 +447,23 @@ async def get_process_summary(
                     "error": "No process data available",
                 }
             
+            # Get CPU info and system metrics from latest metrics
+            system_metrics = await conn.fetchrow(
+                """
+                SELECT 
+                    cpu_data->>'cpu_count' as cpu_count,
+                    cpu_data->>'cpu_percent' as system_cpu_percent
+                FROM system_metrics 
+                WHERE agent_id = $1 
+                ORDER BY timestamp DESC 
+                LIMIT 1
+                """,
+                str(agent_id),
+            )
+            # Default to 1 if not available to avoid division by zero
+            cpu_count = int(system_metrics["cpu_count"]) if system_metrics and system_metrics["cpu_count"] else 1
+            system_cpu_percent = float(system_metrics["system_cpu_percent"]) if system_metrics and system_metrics["system_cpu_percent"] else None
+            
             # Aggregate statistics
             stats = await conn.fetchrow(
                 """
@@ -386,7 +472,9 @@ async def get_process_summary(
                     SUM(num_threads) as total_threads,
                     SUM(num_connections) as total_connections,
                     AVG(cpu_percent) as avg_cpu,
+                    SUM(cpu_percent) as total_cpu,
                     AVG(memory_percent) as avg_memory,
+                    SUM(memory_percent) as total_memory,
                     SUM(memory_rss) as total_memory_rss
                 FROM processes
                 WHERE agent_id = $1 AND collected_at = $2
@@ -409,14 +497,23 @@ async def get_process_summary(
                 latest_time,
             )
             
+            total_cpu_raw = float(stats["total_cpu"] or 0)
+            # Calculate actual CPU utilization (total_cpu / num_cores)
+            cpu_utilization = round(total_cpu_raw / cpu_count, 2) if cpu_count > 0 else 0
+            
             return {
                 "agent_id": str(agent_id),
                 "collected_at": latest_time,
                 "total_processes": stats["total_processes"],
                 "total_threads": stats["total_threads"],
                 "total_connections": stats["total_connections"],
+                "cpu_count": cpu_count,
+                "system_cpu_percent": system_cpu_percent,
                 "avg_cpu_percent": round(float(stats["avg_cpu"] or 0), 2),
+                "total_cpu_percent": round(total_cpu_raw, 2),
+                "cpu_utilization_percent": cpu_utilization,
                 "avg_memory_percent": round(float(stats["avg_memory"] or 0), 2),
+                "total_memory_percent": round(float(stats["total_memory"] or 0), 2),
                 "total_memory_rss_mb": round((stats["total_memory_rss"] or 0) / 1024 / 1024, 2),
                 "processes_by_user": [
                     {"username": row["username"], "count": row["count"]}

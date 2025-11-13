@@ -352,15 +352,18 @@ class Forwarder:
     def forward_processes(self):
         """
         Forwards pending process data to the server.
+        
+        Sends ALL unforwarded processes in one complete snapshot.
+        This ensures the server receives the full process list from each collection cycle.
         """
         try:
-            # Get pending processes from storage
-            processes = self.storage.get_pending_processes(batch_size=100)
+            # Get ALL pending processes from storage (no batching)
+            processes = self.storage.get_pending_processes()
             
             if not processes:
                 return
             
-            print(f"Found {len(processes)} processes to forward")
+            print(f"Found {len(processes)} processes to forward (complete snapshot)")
             
             # Prepare payload
             payload = []

@@ -39,6 +39,11 @@ class ExportStatusResponse(BaseModel):
     last_export_counts: dict
     total_exports: int
     last_export_time: Optional[str] = None
+    # Unexported counts (current in database)
+    unexported_logs: int = 0
+    unexported_metrics: int = 0
+    unexported_processes: int = 0
+    unexported_commands: int = 0
 
 
 class LabeledDatasetRequest(BaseModel):
@@ -93,6 +98,41 @@ async def get_export_status(
             except:
                 pass
     
+    # Count unexported data (new data since last export)
+    from internal.storage.postgres import get_db_pool
+    pool = get_db_pool()
+    unexported_logs = 0
+    unexported_metrics = 0
+    unexported_processes = 0
+    unexported_commands = 0
+    
+    try:
+        async with pool.acquire() as conn:
+            # Count logs (total in DB)
+            total_logs = await conn.fetchval("SELECT COUNT(*) FROM logs")
+            # Calculate new logs since last export
+            unexported_logs = max(0, total_logs - exporter.last_export_counts['logs'])
+            
+            # Count metrics (total in DB)
+            total_metrics = await conn.fetchval("SELECT COUNT(*) FROM system_metrics")
+            unexported_metrics = max(0, total_metrics - exporter.last_export_counts['metrics'])
+            
+            # Count processes from history table (all snapshots for ML)
+            try:
+                total_processes = await conn.fetchval("SELECT COUNT(*) FROM processes_history")
+                unexported_processes = max(0, total_processes - exporter.last_export_counts['processes'])
+            except asyncpg.exceptions.UndefinedTableError:
+                unexported_processes = 0
+            
+            # Count commands (total in DB)
+            try:
+                total_commands = await conn.fetchval("SELECT COUNT(*) FROM commands")
+                unexported_commands = max(0, total_commands - exporter.last_export_counts['commands'])
+            except asyncpg.exceptions.UndefinedTableError:
+                unexported_commands = 0
+    except Exception as e:
+        print(f"Error counting unexported data: {e}")
+    
     return ExportStatusResponse(
         logs_threshold=exporter.thresholds["logs"],
         metrics_threshold=exporter.thresholds["metrics"],
@@ -101,7 +141,11 @@ async def get_export_status(
         export_directory=str(exporter.export_dir),
         last_export_counts=exporter.last_export_counts,
         total_exports=total_exports,
-        last_export_time=exporter.last_export_time.isoformat() if exporter.last_export_time else None
+        last_export_time=exporter.last_export_time.isoformat() if exporter.last_export_time else None,
+        unexported_logs=unexported_logs,
+        unexported_metrics=unexported_metrics,
+        unexported_processes=unexported_processes,
+        unexported_commands=unexported_commands
     )
 
 
@@ -418,7 +462,7 @@ async def download_export_file(
         )
         
     except Exception as e:
-        logger.error(f"Error filtering export file: {e}")
+        print(f"Error filtering export file: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to filter export data: {str(e)}"

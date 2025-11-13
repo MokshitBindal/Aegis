@@ -29,6 +29,11 @@ class MetricsCollector:
         self._latest_metrics = {}
         self._collection_thread = None  # Thread reference for better control
         
+        # Store previous network and disk I/O values for rate calculation
+        self._prev_net_io = None
+        self._prev_disk_io = None
+        self._prev_time = None
+        
     def collect_cpu_metrics(self) -> dict[str, Any]:
         """Collect CPU-related metrics"""
         # Convert tuple to list for JSON serialization
@@ -53,26 +58,71 @@ class MetricsCollector:
         }
     
     def collect_disk_metrics(self) -> dict[str, Any]:
-        """Collect disk-related metrics"""
+        """
+        Collect disk-related metrics.
+        Returns both cumulative totals and current rates (bytes/sec).
+        """
+        import time
         disk = psutil.disk_usage('/')
         io = psutil.disk_io_counters()
+        current_time = time.time()
+        
+        # Calculate rates if we have previous values
+        disk_read_rate = 0
+        disk_write_rate = 0
+        
+        if io and self._prev_disk_io and self._prev_time:
+            time_delta = current_time - self._prev_time
+            if time_delta > 0:
+                disk_read_rate = int((io.read_bytes - self._prev_disk_io.read_bytes) / time_delta)
+                disk_write_rate = int((io.write_bytes - self._prev_disk_io.write_bytes) / time_delta)
+        
+        # Store current values for next calculation
+        if io:
+            self._prev_disk_io = io
+        self._prev_time = current_time
+        
         return {
             "disk_total": int(disk.total),
             "disk_used": int(disk.used),
             "disk_free": int(disk.free),
             "disk_percent": float(disk.percent),
             "disk_read_bytes": int(io.read_bytes if io else 0),
-            "disk_write_bytes": int(io.write_bytes if io else 0)
+            "disk_write_bytes": int(io.write_bytes if io else 0),
+            "disk_read_rate": disk_read_rate,   # bytes/sec
+            "disk_write_rate": disk_write_rate  # bytes/sec
         }
     
     def collect_network_metrics(self) -> dict[str, Any]:
-        """Collect network-related metrics"""
+        """
+        Collect network-related metrics.
+        Returns both cumulative totals and current rates (bytes/sec).
+        """
+        import time
         net = psutil.net_io_counters()
+        current_time = time.time()
+        
+        # Calculate rates if we have previous values
+        bytes_sent_rate = 0
+        bytes_recv_rate = 0
+        
+        if self._prev_net_io and self._prev_time:
+            time_delta = current_time - self._prev_time
+            if time_delta > 0:
+                bytes_sent_rate = int((net.bytes_sent - self._prev_net_io.bytes_sent) / time_delta)
+                bytes_recv_rate = int((net.bytes_recv - self._prev_net_io.bytes_recv) / time_delta)
+        
+        # Store current values for next calculation
+        self._prev_net_io = net
+        self._prev_time = current_time
+        
         return {
             "net_bytes_sent": int(net.bytes_sent),
             "net_bytes_recv": int(net.bytes_recv),
             "net_packets_sent": int(net.packets_sent),
-            "net_packets_recv": int(net.packets_recv)
+            "net_packets_recv": int(net.packets_recv),
+            "net_bytes_sent_rate": bytes_sent_rate,  # bytes/sec
+            "net_bytes_recv_rate": bytes_recv_rate   # bytes/sec
         }
 
     def collect_process_metrics(self) -> dict[str, Any]:

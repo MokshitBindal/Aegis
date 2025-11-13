@@ -166,6 +166,14 @@ export default function DashboardPage() {
             👥 User Management
           </Link>
         )}
+        {(isAdmin || isOwner) && (
+          <Link
+            to="/ml-data"
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            🤖 ML Data Export
+          </Link>
+        )}
       </nav>
 
       <main className="mt-8">

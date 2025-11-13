@@ -84,6 +84,8 @@ class DataExporter:
         Check all data types and export if thresholds are exceeded.
         This should be called periodically (e.g., every 5 minutes).
         
+        When ANY threshold is exceeded, ALL data types are exported together.
+        
         Args:
             force: If True, export regardless of thresholds
         
@@ -91,14 +93,36 @@ class DataExporter:
             Dict with counts of exported items
         """
         try:
-            result = {}
-            result['logs'] = await self._check_and_export_logs(force)
-            result['metrics'] = await self._check_and_export_metrics(force)
-            result['processes'] = await self._check_and_export_processes(force)
-            result['commands'] = await self._check_and_export_commands(force)
+            # Check if any threshold is exceeded
+            should_export = force
             
-            # Update last export time
-            self.last_export_time = datetime.now(timezone.utc)
+            if not force:
+                async with self.pool.acquire() as conn:
+                    # Check each data type against its threshold
+                    logs_count = await conn.fetchval("SELECT COUNT(*) FROM logs")
+                    new_logs = logs_count - self.last_export_counts['logs']
+                    
+                    metrics_count = await conn.fetchval("SELECT COUNT(*) FROM system_metrics")
+                    new_metrics = metrics_count - self.last_export_counts['metrics']
+                    
+                    # Check if ANY threshold is exceeded
+                    if (new_logs >= self.thresholds['logs'] or 
+                        new_metrics >= self.thresholds['metrics']):
+                        should_export = True
+                        logger.info(f"Export triggered: logs={new_logs}/{self.thresholds['logs']}, metrics={new_metrics}/{self.thresholds['metrics']}")
+            
+            result = {}
+            if should_export:
+                # Export ALL data types when triggered
+                result['logs'] = await self._check_and_export_logs(force=True)
+                result['metrics'] = await self._check_and_export_metrics(force=True)
+                result['processes'] = await self._check_and_export_processes(force=True)
+                result['commands'] = await self._check_and_export_commands(force=True)
+                
+                # Update last export time
+                self.last_export_time = datetime.now(timezone.utc)
+            else:
+                result = {'logs': 0, 'metrics': 0, 'processes': 0, 'commands': 0}
             
             return result
         except Exception as e:
@@ -123,43 +147,49 @@ class DataExporter:
             new_logs = total_count - self.last_export_counts['logs']
             
             if force or new_logs >= self.thresholds['logs']:
-                logger.info(f"Exporting {new_logs} new logs (threshold: {self.thresholds['logs']}, force: {force})")
+                logger.info(f"Exporting ALL logs from database (total: {total_count}, new: {new_logs})")
                 
-                # Fetch logs (get the oldest ones first)
+                # Fetch ALL logs (export everything in the database)
+                # Note: logs table is a TimescaleDB hypertable with NO id column
+                # Columns: timestamp, agent_id, hostname, raw_data
                 logs = await conn.fetch(
                     """
-                    SELECT id, timestamp, agent_id, hostname, raw_json
+                    SELECT timestamp, agent_id, hostname, raw_data
                     FROM logs
-                    ORDER BY id
-                    LIMIT $1
-                    """,
-                    max(new_logs, self.thresholds['logs']) if force else self.thresholds['logs']
+                    ORDER BY timestamp ASC
+                    """
                 )
                 
                 if logs:
                     # Export to file
                     export_path = await self._export_logs_to_file(logs)
+                    
+                    # Update last export count BEFORE cleanup
+                    # This represents the total we've exported, not what remains after cleanup
                     self.last_export_counts['logs'] = total_count
                     
-                    # Auto-cleanup: Delete exported logs from live view (keep minimum)
+                    # Auto-cleanup: Keep only the most recent min_live_records logs
                     if self.auto_cleanup and total_count > self.min_live_records['logs']:
-                        max_id_to_delete = logs[-1]['id']
-                        # Keep at least min_live_records recent logs
-                        min_id_to_keep = await conn.fetchval(
+                        # Delete all but the most recent min_live_records logs
+                        # Get the timestamp of the Nth most recent log (where N = min_live_records)
+                        cutoff_timestamp = await conn.fetchval(
                             """
-                            SELECT id FROM logs
-                            ORDER BY id DESC
+                            SELECT timestamp FROM logs
+                            ORDER BY timestamp DESC
                             LIMIT 1 OFFSET $1
                             """,
                             self.min_live_records['logs'] - 1
                         )
                         
-                        if min_id_to_keep and max_id_to_delete < min_id_to_keep:
-                            deleted = await conn.execute(
-                                "DELETE FROM logs WHERE id <= $1",
-                                max_id_to_delete
+                        if cutoff_timestamp:
+                            # Delete all logs older than cutoff
+                            result = await conn.execute(
+                                "DELETE FROM logs WHERE timestamp < $1",
+                                cutoff_timestamp
                             )
-                            logger.info(f"Cleaned up {deleted} old logs from live view (exported to {export_path})")
+                            # Extract count from "DELETE X" string
+                            deleted_count = int(result.split()[-1]) if result and result.startswith('DELETE') else 0
+                            logger.info(f"Cleaned up {deleted_count} old logs (keeping {self.min_live_records['logs']} most recent)")
                     
                     return len(logs)
             
@@ -182,44 +212,40 @@ class DataExporter:
             new_metrics = total_count - self.last_export_counts['metrics']
             
             if force or new_metrics >= self.thresholds['metrics']:
-                logger.info(f"Exporting {new_metrics} new metrics (threshold: {self.thresholds['metrics']}, force={force})")
+                logger.info(f"Exporting ALL metrics from database (total: {total_count}, new: {new_metrics})")
                 
+                # Fetch ALL metrics (export everything in the database)
                 metrics = await conn.fetch(
                     """
-                    SELECT id, agent_id, data, collected_at
+                    SELECT id, agent_id, timestamp, cpu_data, memory_data, 
+                           disk_data, network_data, process_data
                     FROM system_metrics
-                    WHERE id > (
-                        SELECT COALESCE(MAX(last_exported_id), 0)
-                        FROM export_tracking
-                        WHERE data_type = 'metrics'
-                    )
                     ORDER BY id
-                    LIMIT $1
-                    """,
-                    self.thresholds['metrics'] if not force else 999999
+                    """
                 )
                 
                 if metrics:
                     export_path = await self._export_metrics_to_file(metrics)
-                    self.last_export_counts['metrics'] = total_count
-                    await self._update_export_tracking('metrics', metrics[-1]['id'], len(metrics))
                     
-                    # Auto-cleanup: Delete exported metrics from live view (keep minimum)
+                    # Update last export count BEFORE cleanup
+                    self.last_export_counts['metrics'] = total_count
+                    
+                    # Auto-cleanup: Keep only the most recent min_live_records metrics
                     if self.auto_cleanup and total_count > self.min_live_records['metrics']:
-                        # Get ID of the record at position min_live_records from the end
-                        min_id_to_keep = await conn.fetchval(
+                        # Get the ID of the Nth most recent metric (where N = min_live_records)
+                        cutoff_id = await conn.fetchval(
                             "SELECT id FROM system_metrics ORDER BY id DESC LIMIT 1 OFFSET $1",
                             self.min_live_records['metrics'] - 1
                         )
                         
-                        if min_id_to_keep:
-                            # Delete older records that were exported
-                            max_id_to_delete = min(metrics[-1]['id'], min_id_to_keep)
-                            deleted = await conn.execute(
-                                "DELETE FROM system_metrics WHERE id <= $1",
-                                max_id_to_delete
+                        if cutoff_id:
+                            # Delete all metrics older than cutoff
+                            result = await conn.execute(
+                                "DELETE FROM system_metrics WHERE id < $1",
+                                cutoff_id
                             )
-                            logger.info(f"Cleaned up {deleted} old metrics from live view (exported to {export_path})")
+                            deleted_count = int(result.split()[-1]) if result and result.startswith('DELETE') else 0
+                            logger.info(f"Cleaned up {deleted_count} old metrics (keeping {self.min_live_records['metrics']} most recent)")
                     
                     return len(metrics)
             
@@ -235,52 +261,52 @@ class DataExporter:
         Returns:
             Number of processes exported
         """
+        try:
+            async with self.pool.acquire() as conn:
+                # Export from processes_history table (all snapshots for ML)
+                result = await conn.fetchrow("SELECT COUNT(*) as count FROM processes_history")
+                total_count = result['count']
+        except asyncpg.exceptions.UndefinedTableError:
+            logger.debug("Processes history table does not exist yet, skipping export")
+            return 0
+        
         async with self.pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT COUNT(*) as count FROM processes")
-            total_count = result['count']
             
             new_processes = total_count - self.last_export_counts['processes']
             
             if force or new_processes >= self.thresholds['processes']:
-                logger.info(f"Exporting {new_processes} new process snapshots (threshold: {self.thresholds['processes']}, force={force})")
+                logger.info(f"Exporting ALL process snapshots from history (total: {total_count}, new: {new_processes})")
                 
+                # Fetch ALL process snapshots from history table
                 processes = await conn.fetch(
                     """
                     SELECT id, agent_id, name, pid, cpu_percent, memory_percent, 
                            status, cmdline, username, collected_at
-                    FROM processes
-                    WHERE id > (
-                        SELECT COALESCE(MAX(last_exported_id), 0)
-                        FROM export_tracking
-                        WHERE data_type = 'processes'
-                    )
+                    FROM processes_history
                     ORDER BY id
-                    LIMIT $1
-                    """,
-                    self.thresholds['processes'] if not force else 999999
+                    """
                 )
                 
                 if processes:
                     export_path = await self._export_processes_to_file(processes)
-                    self.last_export_counts['processes'] = total_count
-                    await self._update_export_tracking('processes', processes[-1]['id'], len(processes))
                     
-                    # Auto-cleanup: Delete exported processes from live view (keep minimum)
+                    # Update last export count BEFORE cleanup
+                    self.last_export_counts['processes'] = total_count
+                    
+                    # Auto-cleanup: Keep only the most recent min_live_records process snapshots
                     if self.auto_cleanup and total_count > self.min_live_records['processes']:
-                        # Get ID of the record at position min_live_records from the end
-                        min_id_to_keep = await conn.fetchval(
-                            "SELECT id FROM processes ORDER BY id DESC LIMIT 1 OFFSET $1",
+                        cutoff_id = await conn.fetchval(
+                            "SELECT id FROM processes_history ORDER BY id DESC LIMIT 1 OFFSET $1",
                             self.min_live_records['processes'] - 1
                         )
                         
-                        if min_id_to_keep:
-                            # Delete older records that were exported
-                            max_id_to_delete = min(processes[-1]['id'], min_id_to_keep)
-                            deleted = await conn.execute(
-                                "DELETE FROM processes WHERE id <= $1",
-                                max_id_to_delete
+                        if cutoff_id:
+                            result = await conn.execute(
+                                "DELETE FROM processes_history WHERE id < $1",
+                                cutoff_id
                             )
-                            logger.info(f"Cleaned up {deleted} old process snapshots from live view (exported to {export_path})")
+                            deleted_count = int(result.split()[-1]) if result and result.startswith('DELETE') else 0
+                            logger.info(f"Cleaned up {deleted_count} old process snapshots (keeping {self.min_live_records['processes']} most recent)")
                     
                     return len(processes)
             
@@ -296,52 +322,51 @@ class DataExporter:
         Returns:
             Number of commands exported
         """
+        try:
+            async with self.pool.acquire() as conn:
+                result = await conn.fetchrow("SELECT COUNT(*) as count FROM commands")
+                total_count = result['count']
+        except asyncpg.exceptions.UndefinedTableError:
+            logger.debug("Commands table does not exist yet, skipping export")
+            return 0
+        
         async with self.pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT COUNT(*) as count FROM commands")
-            total_count = result['count']
             
             new_commands = total_count - self.last_export_counts['commands']
             
             if force or new_commands >= self.thresholds['commands']:
-                logger.info(f"Exporting {new_commands} new commands (threshold: {self.thresholds['commands']}, force={force})")
+                logger.info(f"Exporting ALL commands from database (total: {total_count}, new: {new_commands})")
                 
+                # Fetch ALL commands (export everything in the database)
                 commands = await conn.fetch(
                     """
                     SELECT id, agent_id, command, user_name, timestamp, 
                            shell, working_directory, exit_code
                     FROM commands
-                    WHERE id > (
-                        SELECT COALESCE(MAX(last_exported_id), 0)
-                        FROM export_tracking
-                        WHERE data_type = 'commands'
-                    )
                     ORDER BY id
-                    LIMIT $1
-                    """,
-                    self.thresholds['commands'] if not force else 999999
+                    """
                 )
                 
                 if commands:
                     export_path = await self._export_commands_to_file(commands)
-                    self.last_export_counts['commands'] = total_count
-                    await self._update_export_tracking('commands', commands[-1]['id'], len(commands))
                     
-                    # Auto-cleanup: Delete exported commands from live view (keep minimum)
+                    # Update last export count BEFORE cleanup
+                    self.last_export_counts['commands'] = total_count
+                    
+                    # Auto-cleanup: Keep only the most recent min_live_records commands
                     if self.auto_cleanup and total_count > self.min_live_records['commands']:
-                        # Get ID of the record at position min_live_records from the end
-                        min_id_to_keep = await conn.fetchval(
+                        cutoff_id = await conn.fetchval(
                             "SELECT id FROM commands ORDER BY id DESC LIMIT 1 OFFSET $1",
                             self.min_live_records['commands'] - 1
                         )
                         
-                        if min_id_to_keep:
-                            # Delete older records that were exported
-                            max_id_to_delete = min(commands[-1]['id'], min_id_to_keep)
-                            deleted = await conn.execute(
-                                "DELETE FROM commands WHERE id <= $1",
-                                max_id_to_delete
+                        if cutoff_id:
+                            result = await conn.execute(
+                                "DELETE FROM commands WHERE id < $1",
+                                cutoff_id
                             )
-                            logger.info(f"Cleaned up {deleted} old commands from live view (exported to {export_path})")
+                            deleted_count = int(result.split()[-1]) if result and result.startswith('DELETE') else 0
+                            logger.info(f"Cleaned up {deleted_count} old commands (keeping {self.min_live_records['commands']} most recent)")
                     
                     return len(commands)
             
@@ -361,11 +386,10 @@ class DataExporter:
         logs_data = []
         for log in logs:
             logs_data.append({
-                'id': log['id'],
                 'timestamp': log['timestamp'].isoformat() if log['timestamp'] else None,
                 'agent_id': str(log['agent_id']),
                 'hostname': log['hostname'],
-                'raw_json': log['raw_json'],
+                'raw_data': log['raw_data'],  # JSONB column
                 'exported_at': datetime.now(timezone.utc).isoformat(),
             })
         
@@ -393,17 +417,17 @@ class DataExporter:
         metrics_data = []
         for m in metrics:
             try:
-                data = m['data'] if isinstance(m['data'], dict) else json.loads(m['data'])
-                cpu_data = data.get('cpu_data', {})
-                memory_data = data.get('memory_data', {})
-                disk_data = data.get('disk_data', {})
-                network_data = data.get('network_data', {})
-                process_data = data.get('process_data', {})
+                # Extract JSONB columns (already parsed as dicts by asyncpg)
+                cpu_data = m['cpu_data'] if isinstance(m['cpu_data'], dict) else {}
+                memory_data = m['memory_data'] if isinstance(m['memory_data'], dict) else {}
+                disk_data = m['disk_data'] if isinstance(m['disk_data'], dict) else {}
+                network_data = m['network_data'] if isinstance(m['network_data'], dict) else {}
+                process_data = m['process_data'] if isinstance(m['process_data'], dict) else {}
                 
                 metrics_data.append({
                     'id': m['id'],
                     'agent_id': str(m['agent_id']),
-                    'timestamp': m['collected_at'].isoformat() if m.get('collected_at') else None,
+                    'timestamp': m['timestamp'].isoformat() if m.get('timestamp') else None,
                     'cpu_percent': cpu_data.get('cpu_percent'),
                     'cpu_count': cpu_data.get('cpu_count'),
                     'memory_percent': memory_data.get('memory_percent'),
