@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # --- IMPORT THE ANALYSIS LOOP ---
 from internal.analysis.correlation import run_analysis_loop
 from internal.analysis.incident_aggregator import run_incident_aggregation_loop
+from internal.ml.data_exporter import init_data_exporter, get_data_exporter
 from internal.storage.postgres import close_db_pool, init_db_pool
 from internal.utils.cleanup_task import run_daily_cleanup
 from routers import (
@@ -23,6 +24,7 @@ from routers import (
     incidents,
     ingest,
     metrics,
+    ml_data,
     processes,
     query,
     user_management,
@@ -33,15 +35,42 @@ from routers import (
 background_task = None
 aggregation_task = None
 cleanup_task = None
+data_export_task = None
+
+
+async def run_data_export_loop():
+    """Background task to export data for ML training"""
+    print("Starting data export loop for ML training...")
+    await asyncio.sleep(60)  # Wait 1 minute for server to be ready
+    
+    exporter = get_data_exporter()
+    if not exporter:
+        print("Data exporter not initialized, skipping data export loop")
+        return
+    
+    while True:
+        try:
+            await exporter.check_and_export()
+            await asyncio.sleep(300)  # Check every 5 minutes
+        except asyncio.CancelledError:
+            print("Data export loop cancelled")
+            raise
+        except Exception as e:
+            print(f"Error in data export loop: {e}")
+            await asyncio.sleep(60)  # Wait 1 minute before retrying
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global background_task, aggregation_task, cleanup_task
+    global background_task, aggregation_task, cleanup_task, data_export_task
     print("Server starting up...")
     await init_db_pool()
     
-    # Clean up old invitation tokens with invalid hash format
+    # Initialize data exporter for ML training
     from internal.storage.postgres import get_db_pool
+    pool = get_db_pool()
+    init_data_exporter(pool)
+    
+    # Clean up old invitation tokens with invalid hash format
     try:
         pool = get_db_pool()
         async with pool.acquire() as conn:
@@ -66,6 +95,9 @@ async def lifespan(app: FastAPI):
     
     print("Starting daily data retention cleanup task...")
     cleanup_task = asyncio.create_task(run_daily_cleanup())
+    
+    print("Starting data export task for ML training...")
+    data_export_task = asyncio.create_task(run_data_export_loop())
     
     yield  # Application runs here
     
@@ -94,6 +126,14 @@ async def lifespan(app: FastAPI):
             await cleanup_task
         except asyncio.CancelledError:
             print("Cleanup task cancelled.")
+    
+    if data_export_task:
+        print("Stopping data export task...")
+        data_export_task.cancel()
+        try:
+            await data_export_task
+        except asyncio.CancelledError:
+            print("Data export task cancelled")
             
     await close_db_pool()
 
@@ -128,6 +168,7 @@ app.include_router(agent_alerts.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
 app.include_router(commands.router, prefix="/api")
 app.include_router(processes.router)
+app.include_router(ml_data.router)
 
 @app.get("/")
 async def root():

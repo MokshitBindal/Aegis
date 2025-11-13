@@ -11,7 +11,3 @@ Thumbs.db
 # Extra Files
 detect_os.sh
 aegis-Dev-docs/
-ANALYSIS_REPORT.md
-aegis-Dev-docs/IMPLEMENTATION_ROADMAP.md
-aegis-Dev-docs/AUDIT_REPORT.md
-aegis-Dev-docs/DATABASE_SCHEMA_ANALYSIS.md
