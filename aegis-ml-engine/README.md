@@ -9,7 +9,7 @@
 
 ## 📁 Directory Structure
 
-```
+```text
 aegis-ml-engine/
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies

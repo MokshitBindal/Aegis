@@ -199,8 +199,8 @@ const MetricsPage: React.FC = () => {
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="text-gray-500">Network I/O</h3>
-            {lastMetrics.network.net_bytes_sent_rate !== undefined && 
-             lastMetrics.network.net_bytes_recv_rate !== undefined ? (
+            {lastMetrics.network.net_bytes_sent_rate !== undefined &&
+            lastMetrics.network.net_bytes_recv_rate !== undefined ? (
               <p className="text-sm text-gray-900">
                 ↑ {(lastMetrics.network.net_bytes_sent_rate / 1024).toFixed(2)}{" "}
                 KB/s
