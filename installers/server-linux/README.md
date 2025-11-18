@@ -104,6 +104,7 @@ sudo systemctl status nginx
 ### Credentials
 
 All credentials are saved to:
+
 ```
 /etc/aegis-siem/credentials.txt
 ```
@@ -131,6 +132,7 @@ access_token_expire_minutes = 60
 ```
 
 After changes:
+
 ```bash
 sudo systemctl restart aegis-server
 ```
@@ -140,6 +142,7 @@ sudo systemctl restart aegis-server
 Edit: `/etc/nginx/sites-available/aegis-dashboard`
 
 After changes:
+
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
@@ -195,6 +198,7 @@ sudo bash uninstall.sh
 ```
 
 Options:
+
 - Keep database and data (default: yes)
 - Remove PostgreSQL database (optional)
 - Remove system user
@@ -289,18 +293,21 @@ sudo systemctl reload nginx
 ## System Requirements
 
 ### Minimum
+
 - 2 CPU cores
 - 2GB RAM
 - 10GB disk space
 - Ubuntu 20.04+ or Debian 11+
 
 ### Recommended
+
 - 4 CPU cores
 - 4GB RAM
 - 50GB disk space (for logs/metrics)
 - SSD storage
 
 ### Production (100+ agents)
+
 - 8+ CPU cores
 - 16GB+ RAM
 - 500GB+ disk space

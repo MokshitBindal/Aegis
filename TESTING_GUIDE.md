@@ -9,6 +9,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 ## 📋 Testing Checklist
 
 ### Phase 1: Server Installation (Debian VM)
+
 - [ ] Create Debian 11/12 VM (2GB RAM, 2 CPU, 20GB disk)
 - [ ] Run server installer
 - [ ] Verify all services start correctly
@@ -17,6 +18,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 - [ ] Generate registration token
 
 ### Phase 2: Agent Installation (Arch VM)
+
 - [ ] Create Arch Linux VM (1GB RAM, 1 CPU, 10GB disk)
 - [ ] Run agent installer
 - [ ] Verify agent registers with server
@@ -24,6 +26,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 - [ ] Verify real-time monitoring
 
 ### Phase 3: Functionality Testing
+
 - [ ] System metrics collection
 - [ ] Log collection
 - [ ] Command logging
@@ -38,6 +41,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 ### Server VM (Debian)
 
 **Minimum Requirements:**
+
 - OS: Debian 12 (Bookworm) or Ubuntu 22.04 LTS
 - RAM: 2GB (4GB recommended)
 - CPU: 2 cores
@@ -47,12 +51,14 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 **VM Creation:**
 
 1. **Download Debian ISO**
+
    ```bash
    # Debian 12 Netinstall
    wget https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.0.0-amd64-netinst.iso
    ```
 
 2. **Create VM** (VirtualBox example)
+
    ```bash
    VBoxManage createvm --name "Aegis-Server" --ostype "Debian_64" --register
    VBoxManage modifyvm "Aegis-Server" --memory 2048 --cpus 2 --nic1 bridged
@@ -63,6 +69,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
    ```
 
 3. **Install Debian**
+
    - Boot from ISO
    - Select "Install" (not graphical install)
    - Choose minimal installation (no desktop environment)
@@ -70,13 +77,14 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
    - Create user: `aegis` (or your preferred username)
 
 4. **Post-Install Setup**
+
    ```bash
    # SSH into the VM
    ssh aegis@VM_IP
-   
+
    # Update system
    sudo apt update && sudo apt upgrade -y
-   
+
    # Install git
    sudo apt install -y git
    ```
@@ -84,6 +92,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 ### Agent VM (Arch Linux)
 
 **Minimum Requirements:**
+
 - OS: Arch Linux (latest)
 - RAM: 1GB (2GB recommended)
 - CPU: 1 core
@@ -93,11 +102,13 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 **VM Creation:**
 
 1. **Download Arch ISO**
+
    ```bash
    wget https://mirror.rackspace.com/archlinux/iso/latest/archlinux-x86_64.iso
    ```
 
 2. **Create VM** (VirtualBox example)
+
    ```bash
    VBoxManage createvm --name "Aegis-Agent-Arch" --ostype "ArchLinux_64" --register
    VBoxManage modifyvm "Aegis-Agent-Arch" --memory 1024 --cpus 1 --nic1 bridged
@@ -108,11 +119,12 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
    ```
 
 3. **Install Arch Linux**
+
    ```bash
    # Boot into Arch ISO
    # Follow Arch installation guide or use archinstall script
    archinstall
-   
+
    # Minimal installation:
    # - No desktop environment
    # - Enable SSH
@@ -126,6 +138,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 ### Step 1: Server Installation
 
 1. **Clone Repository on Server VM**
+
    ```bash
    ssh aegis@SERVER_VM_IP
    git clone https://github.com/MokshitBindal/Aegis.git
@@ -133,17 +146,20 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
    ```
 
 2. **Review Installation Script**
+
    ```bash
    less install.sh
    # Verify it looks correct
    ```
 
 3. **Run Installer**
+
    ```bash
    sudo bash install.sh
    ```
 
 4. **Expected Prompts:**
+
    - Database Name: `aegis_siem` (default)
    - Database User: `aegis_user` (default)
    - Generate password: `Y`
@@ -155,28 +171,31 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 5. **Installation Should Take:** 5-10 minutes
 
 6. **Verify Installation:**
+
    ```bash
    # Check services
    sudo systemctl status aegis-server
    sudo systemctl status nginx
    sudo systemctl status postgresql
-   
+
    # All should show "active (running)"
-   
+
    # View credentials
    sudo cat /etc/aegis-siem/credentials.txt
-   
+
    # Test API
    curl http://localhost:8000/health
    # Should return: {"status":"healthy","service":"aegis-siem-server","version":"1.0.0"}
    ```
 
 7. **Access Dashboard:**
+
    - Open browser on host machine
    - Navigate to: `http://SERVER_VM_IP`
    - Should see Aegis SIEM login page
 
 8. **Create Admin User:**
+
    ```bash
    cd /opt/aegis-siem/server
    sudo -u aegis ./venv/bin/python scripts/generate_invitation.py
@@ -192,6 +211,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 ### Step 2: Agent Installation (Arch)
 
 1. **Clone Repository on Agent VM**
+
    ```bash
    ssh user@AGENT_VM_IP
    git clone https://github.com/MokshitBindal/Aegis.git
@@ -199,9 +219,11 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
    ```
 
 2. **Generate Registration Token on Server:**
+
    - Login to dashboard
    - Go to Devices page
    - Click "Generate Token" or use CLI:
+
    ```bash
    # On server VM
    cd /opt/aegis-siem/server
@@ -209,22 +231,25 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
    ```
 
 3. **Run Agent Installer:**
+
    ```bash
    sudo bash install.sh
    ```
 
 4. **Provide Configuration:**
+
    - Server URL: `http://SERVER_VM_IP:8000`
    - Registration Token: (paste from step 2)
 
 5. **Installation Should Take:** 2-3 minutes
 
 6. **Verify Agent:**
+
    ```bash
    # Check service
    sudo systemctl status aegis-agent
    # Should show "active (running)"
-   
+
    # View logs
    sudo journalctl -u aegis-agent -f
    # Should see connection success messages
@@ -239,35 +264,38 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 ### Step 3: Data Collection Testing
 
 1. **Generate Activity on Agent VM:**
+
    ```bash
    # Generate some commands
    ls -la /
    ps aux
    sudo dmesg | tail
-   
+
    # Start some processes
    top &
    htop &
-   
+
    # Generate some network activity
    curl https://google.com
    wget https://example.com
    ```
 
 2. **Check Dashboard (Wait 1-2 minutes):**
+
    - **Metrics:** CPU, Memory, Disk, Network graphs should populate
    - **Logs:** System logs should appear
    - **Commands:** Recent commands should be listed
    - **Processes:** Running processes should be shown
 
 3. **Test Alert Generation:**
+
    ```bash
    # On agent VM - stress test CPU
    yes > /dev/null &
    yes > /dev/null &
    yes > /dev/null &
    yes > /dev/null &
-   
+
    # Wait 1-2 minutes
    # Kill processes
    killall yes
@@ -292,6 +320,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 4. Check ML baseline is being established
 
 **Expected Results:**
+
 - Metrics updated every 60 seconds
 - Logs streaming continuously
 - No critical alerts for normal activity
@@ -307,6 +336,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 4. Should generate high CPU alert within 2-3 minutes
 
 **Expected Results:**
+
 - CPU graph shows spike
 - Alert appears in alerts page
 - Alert severity: Medium or High
@@ -317,6 +347,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 **Goal:** Test command logging and analysis
 
 1. Run suspicious commands:
+
    ```bash
    sudo su -
    cat /etc/shadow
@@ -328,6 +359,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 3. Some commands should trigger alerts
 
 **Expected Results:**
+
 - All commands logged with timestamp
 - Privilege escalation detected
 - Potentially malicious activity flagged
@@ -337,10 +369,11 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 **Goal:** Test network monitoring
 
 1. Generate network traffic:
+
    ```bash
    # Download large file
    wget https://speed.hetzner.de/100MB.bin
-   
+
    # Upload
    scp 100MB.bin user@other-host:/tmp/
    ```
@@ -349,6 +382,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 3. Should see bandwidth spikes
 
 **Expected Results:**
+
 - Network graph shows traffic
 - Download/upload rates tracked
 - No alerts for legitimate traffic
@@ -359,6 +393,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 
 1. Wait for baseline (10-15 minutes normal operation)
 2. Perform anomalous activity:
+
    - Install unusual package
    - Access uncommon files
    - Run at unusual time
@@ -367,6 +402,7 @@ This guide will help you test the Aegis SIEM installation on virtual machines be
 3. Check ML alerts (may take 10 minutes)
 
 **Expected Results:**
+
 - ML model establishes baseline
 - Anomalous activity generates ML alert
 - Alert shows anomaly score
@@ -471,6 +507,7 @@ curl http://SERVER_IP:8000/api/devices
 Installation is successful if:
 
 ✅ **Server:**
+
 - All services running (aegis-server, nginx, postgresql)
 - Dashboard accessible via browser
 - API health check returns 200 OK
@@ -478,6 +515,7 @@ Installation is successful if:
 - Database contains tables
 
 ✅ **Agent:**
+
 - Service running without errors
 - Successfully registered with server
 - Appears in dashboard devices list
@@ -485,6 +523,7 @@ Installation is successful if:
 - Credentials file exists
 
 ✅ **Monitoring:**
+
 - Metrics collected every 60 seconds
 - Logs streaming to server
 - Commands being logged
@@ -492,6 +531,7 @@ Installation is successful if:
 - Alerts generated appropriately
 
 ✅ **ML Detection:**
+
 - Model initializes successfully
 - Baseline established after 10-15 min
 - Anomalies detected
@@ -521,18 +561,21 @@ Installation is successful if:
 **Environment:** VirtualBox / VMware / KVM
 
 ## Server Installation
+
 - OS: Debian 12 / Ubuntu 22.04
 - Installation Time: X minutes
 - Issues: None / List issues
 - Status: ✅ Success / ❌ Failed
 
 ## Agent Installation
+
 - OS: Arch Linux
 - Installation Time: X minutes
 - Registration: ✅ Success / ❌ Failed
 - Status: ✅ Online / ❌ Offline
 
 ## Functionality Tests
+
 - [ ] Metrics Collection
 - [ ] Log Streaming
 - [ ] Command Logging
@@ -541,6 +584,7 @@ Installation is successful if:
 - [ ] ML Detection
 
 ## Performance
+
 - Server RAM Usage: XMB
 - Server CPU Usage: X%
 - Agent RAM Usage: XMB
@@ -548,14 +592,17 @@ Installation is successful if:
 - Network Bandwidth: X KB/s
 
 ## Issues Found
+
 1. Issue description
 2. Issue description
 
 ## Recommendations
+
 1. Recommendation
 2. Recommendation
 
 ## Overall Assessment
+
 ✅ Ready for production / ⚠️ Needs fixes / ❌ Major issues
 ```
 

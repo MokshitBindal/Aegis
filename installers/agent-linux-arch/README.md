@@ -124,6 +124,7 @@ sudo cat /opt/aegis-agent/agent.credentials
 ## Security Features
 
 The systemd service includes hardening:
+
 - `NoNewPrivileges=true` - Prevents privilege escalation
 - `PrivateTmp=true` - Isolated /tmp directory
 - `ProtectSystem=strict` - Read-only system directories
