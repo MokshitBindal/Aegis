@@ -52,6 +52,12 @@ aegis-Dev-docs/
 PROJECT_KNOWLEDGE_BASE.md
 *.md.backup
 
+# Research and development notes
+aegis-ml-engine/PROJECT_IMPROVEMENTS.md
+aegis-ml-engine/RESULTS.md
+aegis-ml-engine/SUBMISSION_SUMMARY.md
+*.pdf
+
 # Node.js
 node_modules/
 npm-debug.log*
