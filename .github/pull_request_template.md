@@ -1,7 +1,9 @@
 ## Description
+
 <!-- Provide a brief description of the changes in this PR -->
 
 ## Type of Change
+
 <!-- Mark the relevant option with an 'x' -->
 
 - [ ] Bug fix (non-breaking change which fixes an issue)
@@ -13,19 +15,22 @@
 - [ ] Configuration change
 
 ## Related Issues
+
 <!-- Link to related issues using #issue_number -->
 
 Fixes #
 Relates to #
 
 ## Changes Made
+
 <!-- List the specific changes made in this PR -->
 
-- 
-- 
-- 
+-
+-
+-
 
 ## Testing
+
 <!-- Describe the tests you ran and how to reproduce them -->
 
 - [ ] Tested on Debian/Ubuntu
@@ -35,6 +40,7 @@ Relates to #
 - [ ] Integration tests added/updated
 
 ## Checklist
+
 <!-- Mark completed items with an 'x' -->
 
 - [ ] My code follows the project's style guidelines
@@ -47,7 +53,9 @@ Relates to #
 - [ ] Any dependent changes have been merged and published
 
 ## Screenshots (if applicable)
+
 <!-- Add screenshots to help explain your changes -->
 
 ## Additional Notes
+
 <!-- Add any additional notes or context about the PR -->

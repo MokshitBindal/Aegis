@@ -3,13 +3,16 @@
 ## Branch Protection Rules
 
 ### Main Branch
+
 Protect the `main` branch with the following rules:
 
 1. **Require pull request reviews before merging**
+
    - Required approving reviews: 1
    - Dismiss stale pull request approvals when new commits are pushed
 
 2. **Require status checks to pass before merging**
+
    - Require branches to be up to date before merging
    - Required status checks:
      - `Python Tests (Server & Agent)`
@@ -22,16 +25,19 @@ Protect the `main` branch with the following rules:
 4. **Do not allow bypassing the above settings**
 
 ### Develop Branch
+
 Similar protection rules as main, but allow direct commits from maintainers for development work.
 
 ## Repository Settings
 
 ### General
+
 - **Default branch:** `main`
 - **Merge button:** Allow squash merging
 - **Automatically delete head branches:** Enabled
 
 ### Security & Analysis
+
 - **Dependency graph:** Enabled
 - **Dependabot alerts:** Enabled
 - **Dependabot security updates:** Enabled
@@ -39,6 +45,7 @@ Similar protection rules as main, but allow direct commits from maintainers for 
 - **Secret scanning:** Enabled
 
 ### Actions
+
 - **Actions permissions:** Allow all actions and reusable workflows
 - **Workflow permissions:** Read and write permissions
 - **Allow GitHub Actions to create and approve pull requests:** Disabled
@@ -76,6 +83,7 @@ Add the following secrets for CI/CD:
 The repository includes the following GitHub Actions workflows:
 
 1. **CI/CD Pipeline** (`.github/workflows/ci.yml`)
+
    - Runs on push to main, develop, deployment
    - Tests Python backend and agent
    - Tests TypeScript frontend
@@ -83,10 +91,12 @@ The repository includes the following GitHub Actions workflows:
    - Build verification
 
 2. **Dependency Review** (`.github/workflows/dependency-review.yml`)
+
    - Runs on pull requests
    - Reviews new dependencies for security issues
 
 3. **Installer Tests** (`.github/workflows/installer-tests.yml`)
+
    - Validates installer scripts
    - ShellCheck linting
    - Syntax validation
