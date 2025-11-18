@@ -1,0 +1,22 @@
+Package: aegis-siem-server
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: amd64
+Depends: python3 (>= 3.11), python3-pip, postgresql (>= 12), nginx, systemd
+Maintainer: Mokshit Bindal <mokshit@aegis-siem.dev>
+Description: Aegis SIEM Server - Enterprise Security Monitoring
+ Aegis SIEM is a comprehensive security information and event management
+ system with ML-based anomaly detection, real-time monitoring, and
+ centralized security event management.
+ .
+ This package installs the Aegis SIEM server with:
+  - FastAPI backend with REST API
+  - PostgreSQL database integration
+  - ML-based anomaly detection
+  - Alert management and triage
+  - Role-based access control (RBAC)
+  - Process monitoring
+  - React-based dashboard
+  - Nginx reverse proxy configuration
+Homepage: https://github.com/MokshitBindal/Aegis

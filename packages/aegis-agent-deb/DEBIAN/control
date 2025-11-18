@@ -1,0 +1,21 @@
+Package: aegis-siem-agent
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: amd64
+Depends: python3 (>= 3.11), python3-pip, systemd
+Maintainer: Mokshit Bindal <mokshit@aegis-siem.dev>
+Description: Aegis SIEM Agent - Lightweight Security Monitoring Agent
+ Aegis SIEM Agent collects system metrics, logs, commands, and process
+ information and forwards them to the Aegis SIEM server for analysis
+ and anomaly detection.
+ .
+ Features:
+  - Real-time system metrics collection (CPU, memory, disk, network)
+  - Command logging and monitoring
+  - Process monitoring
+  - Log file monitoring
+  - Secure JWT-based authentication
+  - Auto-registration with server
+  - Minimal resource footprint
+Homepage: https://github.com/MokshitBindal/Aegis
