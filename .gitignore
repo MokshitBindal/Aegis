@@ -50,6 +50,7 @@ detect_os.sh
 
 # Documentation (keep these local)
 aegis-Dev-docs/
+docs/
 PROJECT_KNOWLEDGE_BASE.md
 TESTING_GUIDE.md
 *.md.backup
