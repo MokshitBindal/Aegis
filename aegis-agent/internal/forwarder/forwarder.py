@@ -66,6 +66,8 @@ class Forwarder:
         self.ingest_url = f"{self.server_base}/api/ingest"
         self.metrics_url = f"{self.server_base}/api/metrics"
         self.alerts_url = f"{self.server_base}/api/agent-alerts"
+        self.commands_url = f"{self.server_base}/api/commands"
+        self.status_url = f"{self.server_base}/api/device/status"
 
         if not self.agent_id:
             raise ValueError(
@@ -94,13 +96,17 @@ class Forwarder:
         print("Forwarder initialized.")
 
     def start(self):
-        """Starts the forwarder thread."""
+        """Starts the forwarder thread and sends online status."""
         print("Forwarder thread starting...")
+        # Send online status to server
+        self.send_status("online")
         self.thread.start()
 
     def stop(self):
-        """Signals the forwarder thread to stop."""
+        """Signals the forwarder thread to stop and sends offline status."""
         print("Forwarder thread stopping...")
+        # Send offline status to server
+        self.send_status("offline")
         self.stop_event.set()
         self.thread.join() # Wait for the thread to finish
         print("Forwarder thread stopped.")
@@ -128,6 +134,9 @@ class Forwarder:
                 
                 # Forward commands if available
                 self.forward_commands()
+                
+                # Forward processes
+                self.forward_processes()
             except Exception as e:
                 print(f"Error in forwarder run loop: {e}")
 
@@ -340,3 +349,90 @@ class Forwarder:
                 )
         except Exception as e:
             print(f"Error forwarding commands: {e}")
+    def forward_processes(self):
+        """
+        Forwards pending process data to the server.
+        
+        Sends ALL unforwarded processes in one complete snapshot.
+        This ensures the server receives the full process list from each collection cycle.
+        """
+        try:
+            # Get ALL pending processes from storage (no batching)
+            processes = self.storage.get_pending_processes()
+            
+            if not processes:
+                return
+            
+            print(f"Found {len(processes)} processes to forward (complete snapshot)")
+            
+            # Prepare payload
+            payload = []
+            process_ids = []
+            
+            for proc in processes:
+                payload.append({
+                    "pid": proc.get("pid"),
+                    "name": proc.get("name"),
+                    "exe": proc.get("exe"),
+                    "cmdline": proc.get("cmdline"),
+                    "username": proc.get("username"),
+                    "status": proc.get("status"),
+                    "create_time": proc.get("create_time"),
+                    "ppid": proc.get("ppid"),
+                    "cpu_percent": proc.get("cpu_percent"),
+                    "memory_percent": proc.get("memory_percent"),
+                    "memory_rss": proc.get("memory_rss"),
+                    "memory_vms": proc.get("memory_vms"),
+                    "num_threads": proc.get("num_threads"),
+                    "num_fds": proc.get("num_fds"),
+                    "num_connections": proc.get("num_connections"),
+                    "connection_details": proc.get("connection_details", []),
+                    "agent_id": proc.get("agent_id"),
+                    "collected_at": proc.get("collected_at"),
+                })
+                process_ids.append(proc["id"])
+            
+            # Send to server
+            processes_url = f"{self.server_base}/api/processes"
+            response = requests.post(
+                processes_url, json=payload, headers=self.headers, timeout=10
+            )
+            
+            if response.status_code == 200:
+                print(f"Successfully forwarded {len(processes)} processes")
+                # Mark as forwarded
+                self.storage.mark_processes_forwarded(process_ids)
+            else:
+                print(
+                    f"Failed to forward processes: "
+                    f"{response.status_code} {response.text}"
+                )
+        except Exception as e:
+            print(f"Error forwarding processes: {e}")
+    
+    def send_status(self, status: str):
+        """
+        Sends agent status (online/offline) to the server.
+        
+        Args:
+            status: Either "online" or "offline"
+        """
+        try:
+            payload = {
+                "agent_id": self.agent_id,
+                "status": status
+            }
+            
+            response = requests.post(
+                self.status_url,
+                json=payload,
+                headers=self.headers,
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                print(f"Agent status updated to: {status}")
+            else:
+                print(f"Failed to update status: {response.status_code}")
+        except Exception as e:
+            print(f"Error sending status update: {e}")

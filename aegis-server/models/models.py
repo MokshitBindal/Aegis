@@ -2,8 +2,38 @@
 
 import uuid
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+# --- Role-Based Access Control ---
+
+class UserRole(str, Enum):
+    """
+    Enum for user roles in the RBAC system.
+    owner: Super admin, can create admins and manage all resources
+    admin: SOC analyst, can claim and triage alerts, manage devices
+    """
+    OWNER = "owner"
+    ADMIN = "admin"
+
+class AssignmentStatus(str, Enum):
+    """
+    Enum for alert assignment status.
+    """
+    UNASSIGNED = "unassigned"
+    ASSIGNED = "assigned"
+    INVESTIGATING = "investigating"
+    RESOLVED = "resolved"
+    ESCALATED = "escalated"
+
+class ResolutionType(str, Enum):
+    """
+    Enum for alert resolution types.
+    """
+    TRUE_POSITIVE = "true_positive"
+    FALSE_POSITIVE = "false_positive"
+    BENIGN_POSITIVE = "benign_positive"
 
 # --- Log Ingestion Models ---
 
@@ -39,6 +69,10 @@ class UserInDB(BaseModel):
     """
     id: int
     email: EmailStr
+    role: UserRole = UserRole.ADMIN
+    is_active: bool = True
+    created_by: int | None = None
+    last_login: datetime | None = None
     
 class Token(BaseModel):
     """
@@ -52,6 +86,8 @@ class TokenData(BaseModel):
     Pydantic model for the data encoded within a JWT.
     """
     email: EmailStr | None = None
+    role: UserRole | None = None
+    user_id: int | None = None
 
 class Invitation(BaseModel):
     """
@@ -82,3 +118,137 @@ class Device(BaseModel):
     name: str
     hostname: str
     registered_at: datetime
+    user_id: int | None = None
+
+
+# --- Alert Assignment Models ---
+
+class AlertAssignment(BaseModel):
+    """
+    Model for alert assignments (triage workflow).
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    alert_id: int
+    assigned_to: int
+    assigned_at: datetime
+    status: AssignmentStatus
+    notes: str | None = None
+    resolution: ResolutionType | None = None
+    resolved_at: datetime | None = None
+    escalated_at: datetime | None = None
+    escalated_to: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+class AlertAssignmentCreate(BaseModel):
+    """
+    Model for claiming an alert.
+    """
+    alert_id: int
+
+class AlertAssignmentUpdate(BaseModel):
+    """
+    Model for updating alert assignment status and notes.
+    """
+    status: AssignmentStatus | None = None
+    notes: str | None = None
+    resolution: ResolutionType | None = None
+
+class AlertEscalation(BaseModel):
+    """
+    Model for escalating an alert to owner.
+    """
+    notes: str
+
+# --- User Management Models ---
+
+class UserCreateByOwner(BaseModel):
+    """
+    Model for Owner creating Admin users.
+    """
+    email: EmailStr
+    password: str
+    role: UserRole
+
+class UserResponse(BaseModel):
+    """
+    Model for user info returned to UI (without password hash).
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    email: EmailStr
+    role: UserRole
+    is_active: bool
+    created_by: int | None = None
+    last_login: datetime | None = None
+
+class UserUpdate(BaseModel):
+    """
+    Model for updating user by Owner.
+    """
+    role: UserRole | None = None
+    is_active: bool | None = None
+
+class DeviceAssignment(BaseModel):
+    """
+    Model for assigning a device to a user (admin or device_user).
+    """
+    device_id: int
+    user_id: int
+
+
+# --- Process Monitoring Models ---
+
+class ConnectionDetail(BaseModel):
+    """
+    Model for network connection details per process.
+    """
+    family: str
+    type: str
+    laddr: str | None = None
+    raddr: str | None = None
+    status: str
+
+class ProcessData(BaseModel):
+    """
+    Model for process information collected by agents.
+    Used for AI/ML behavioral anomaly detection.
+    """
+    pid: int
+    name: str
+    exe: str | None = None
+    cmdline: str | None = None
+    username: str | None = None
+    status: str | None = None
+    create_time: str | None = None
+    ppid: int | None = None
+    cpu_percent: float | None = None
+    memory_percent: float | None = None
+    memory_rss: int | None = None
+    memory_vms: int | None = None
+    num_threads: int | None = None
+    num_fds: int | None = None
+    num_connections: int | None = None
+    connection_details: list[ConnectionDetail] = []
+    agent_id: uuid.UUID
+    collected_at: str
+
+
+# --- Baseline Learning Models ---
+
+class DeviceBaseline(BaseModel):
+    """
+    Pydantic model for storing learned behavioral baselines for a device.
+    Used by the AI model for anomaly detection.
+    """
+    model_config = ConfigDict(from_attributes=True)
+    
+    device_id: uuid.UUID
+    baseline_type: str  # 'process', 'metrics', 'activity', 'command', 'full'
+    baseline_data: dict  # JSONB data containing statistical profiles
+    learned_at: datetime
+    duration_days: int  # How many days of data was analyzed
+    version: int = 1  # For tracking baseline updates

@@ -8,36 +8,37 @@ import AlertsPage from "./pages/AlertsPage";
 import MetricsPage from "./pages/MetricsPage";
 import LogsPage from "./pages/LogsPage";
 import CommandsPage from "./pages/CommandsPage";
+import AlertTriagePage from "./pages/AlertTriagePage";
+import UserManagementPage from "./pages/UserManagementPage";
+import ProcessesPage from "./pages/ProcessesPage";
+import MLDataPage from "./pages/MLDataPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { token: contextToken } = useAuth(); // Get token from context
-  const storedToken = localStorage.getItem("aegis_token"); // Get token from storage
+  const { token } = useAuth();
 
-  // --- ADD LOG HERE ---
-  console.log("ProtectedRoute Check:", { contextToken, storedToken });
-  // --------------------
-
-  const isAuthenticated = contextToken || storedToken;
-
-  if (!isAuthenticated) {
-    console.log("ProtectedRoute: Not authenticated, redirecting to /login"); // Optional log
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
 
 function AppRoutes() {
-  // ... (No changes in AppRoutes function)
+  const { token } = useAuth();
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"
         element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
+          token ? (
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          ) : (
+            <Navigate to="/login" replace />
+          )
         }
       />
       <Route
@@ -93,6 +94,38 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <CommandsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/alert-triage"
+        element={
+          <ProtectedRoute>
+            <AlertTriagePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user-management"
+        element={
+          <ProtectedRoute>
+            <UserManagementPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/processes/:deviceId"
+        element={
+          <ProtectedRoute>
+            <ProcessesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ml-data"
+        element={
+          <ProtectedRoute>
+            <MLDataPage />
           </ProtectedRoute>
         }
       />

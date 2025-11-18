@@ -1,12 +1,11 @@
 # aegis-server/internal/auth/security.py
 
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHashError, VerificationError
 
-# 1. Create a CryptContext instance
-# --- MODIFICATION ---
-# We now specify 'argon2' as the default scheme.
-# This is a modern, secure standard without the 72-byte limit.
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# Use Argon2 directly for password hashing
+# Modern, secure standard without password length limits
+pwd_hasher = PasswordHasher()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
@@ -19,7 +18,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: True if the passwords match, False otherwise.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        pwd_hasher.verify(hashed_password, plain_password)
+        return True
+    except (VerifyMismatchError, InvalidHashError, VerificationError, Exception):
+        # Return False for any verification error including invalid hash format
+        return False
 
 def get_password_hash(password: str) -> str:
     """
@@ -31,4 +35,4 @@ def get_password_hash(password: str) -> str:
     Returns:
         str: The securely hashed and salted password.
     """
-    return pwd_context.hash(password)
+    return pwd_hasher.hash(password)

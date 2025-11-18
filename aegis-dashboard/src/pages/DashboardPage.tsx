@@ -17,7 +17,7 @@ interface Device {
 type DeviceStatusMap = Record<string, "online" | "offline">;
 
 export default function DashboardPage() {
-  const { logout } = useAuth();
+  const { logout, userInfo, isOwner, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [statuses, setStatuses] = useState<DeviceStatusMap>({});
@@ -46,11 +46,22 @@ export default function DashboardPage() {
     const fetchDevices = async () => {
       try {
         setLoading(true);
+
+        // First, refresh all device statuses
+        try {
+          await api.post("/api/devices/refresh-status");
+        } catch (err) {
+          console.error("Failed to refresh device statuses:", err);
+          // Continue even if status refresh fails
+        }
+
+        // Then fetch devices with updated statuses
         const response = await api.get("/api/devices");
         setDevices(response.data);
         const initialStatuses: DeviceStatusMap = {};
         for (const device of response.data) {
-          initialStatuses[device.agent_id] = "offline";
+          // Use the status from the server
+          initialStatuses[device.agent_id] = device.status || "offline";
         }
         setStatuses(initialStatuses);
       } catch (err) {
@@ -95,7 +106,22 @@ export default function DashboardPage() {
   return (
     <div className="container p-8 mx-auto">
       <header className="flex items-center justify-between pb-4 border-b border-gray-700">
-        <h1 className="text-3xl font-bold">Aegis Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Aegis Dashboard</h1>
+          {userInfo && (
+            <p className="text-sm text-gray-400 mt-1">
+              Logged in as{" "}
+              <span className="font-medium text-gray-300">
+                {userInfo.email}
+              </span>{" "}
+              (
+              <span className="capitalize">
+                {userInfo.role.replace("_", " ")}
+              </span>
+              )
+            </p>
+          )}
+        </div>
         <button
           onClick={handleLogout}
           className="px-4 py-2 font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
@@ -103,6 +129,52 @@ export default function DashboardPage() {
           Logout
         </button>
       </header>
+
+      {/* Role-based Navigation */}
+      <nav className="mt-6 flex gap-4 flex-wrap">
+        <Link
+          to="/logs"
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+        >
+          System Logs
+        </Link>
+        <Link
+          to="/alerts"
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+        >
+          View Alerts
+        </Link>
+        <Link
+          to="/commands"
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+        >
+          Command History
+        </Link>
+        {(isAdmin || isOwner) && (
+          <Link
+            to="/alert-triage"
+            className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors"
+          >
+            🔍 Alert Triage
+          </Link>
+        )}
+        {isOwner && (
+          <Link
+            to="/user-management"
+            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+          >
+            👥 User Management
+          </Link>
+        )}
+        {(isAdmin || isOwner) && (
+          <Link
+            to="/ml-data"
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            🤖 ML Data Export
+          </Link>
+        )}
+      </nav>
 
       <main className="mt-8">
         <div className="flex justify-between items-center mb-4">
@@ -156,18 +228,6 @@ export default function DashboardPage() {
                 </>
               )}
             </button>
-            <Link
-              to="/alerts"
-              className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-            >
-              View Alerts
-            </Link>
-            <Link
-              to="/commands"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Command History
-            </Link>
           </div>
         </div>
         <div className="mt-4 overflow-hidden bg-gray-800 rounded-lg shadow">
@@ -188,20 +248,13 @@ export default function DashboardPage() {
                       className="p-4 hover:bg-gray-700 transition-colors"
                     >
                       <div className="flex items-center justify-between">
-                        <Link
-                          to={`/device/${device.agent_id}`}
-                          className="flex-1"
-                        >
-                          <div>
-                            <p className="text-lg font-semibold">
-                              {device.name}
-                            </p>
-                            <p className="text-sm text-gray-400">
-                              {device.hostname} (
-                              {device.agent_id.substring(0, 8)}...)
-                            </p>
-                          </div>
-                        </Link>
+                        <div className="flex-1">
+                          <p className="text-lg font-semibold">{device.name}</p>
+                          <p className="text-sm text-gray-400">
+                            {device.hostname} ({device.agent_id.substring(0, 8)}
+                            ...)
+                          </p>
+                        </div>
 
                         <div className="flex items-center gap-4">
                           {/* Quick Action Buttons */}
@@ -212,6 +265,13 @@ export default function DashboardPage() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               Logs
+                            </Link>
+                            <Link
+                              to={`/commands/${device.agent_id}`}
+                              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Commands
                             </Link>
                             <Link
                               to={`/device/${device.agent_id}/metrics`}
@@ -226,6 +286,13 @@ export default function DashboardPage() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               Alerts
+                            </Link>
+                            <Link
+                              to={`/processes/${device.agent_id}`}
+                              className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Processes
                             </Link>
                           </div>
 

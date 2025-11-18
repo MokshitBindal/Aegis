@@ -42,6 +42,12 @@ async def ingest_metrics(
             
             user_id = record['user_id']
             
+            # Update last_seen timestamp to indicate agent is active
+            await conn.execute(
+                "UPDATE devices SET last_seen = NOW(), status = 'online' WHERE agent_id = $1",
+                x_aegis_agent_id
+            )
+            
             # Convert model fields to JSON strings for JSONB columns
             cpu_json = json.dumps(dict(metrics.cpu))
             memory_json = json.dumps(dict(metrics.memory))
@@ -104,18 +110,42 @@ async def get_metrics(
     
     try:
         async with pool.acquire() as conn:
-            # Verify user owns this device
-            device = await conn.fetchrow("""
-                SELECT 1 FROM devices 
-                WHERE agent_id = $1 AND user_id = (
-                    SELECT id FROM users WHERE email = $2
+            # Get current user and verify access
+            from models.models import UserRole
+            from routers.device import get_user_by_email
+            
+            user = await get_user_by_email(current_user.email, conn)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Verify user has access to this device
+            if user.role == UserRole.OWNER:
+                # Owner can access all devices
+                device = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1",
+                    str(agent_id)
                 )
-            """, str(agent_id), current_user.email)
+            elif user.role == UserRole.ADMIN:
+                # Admin can access devices they own OR are assigned to
+                device = await conn.fetchrow(
+                    """
+                    SELECT 1 FROM devices d
+                    LEFT JOIN device_assignments da ON d.id = da.device_id
+                    WHERE d.agent_id = $1 AND (d.user_id = $2 OR da.user_id = $2)
+                    """,
+                    str(agent_id), user.id
+                )
+            else:
+                # Device User can only access their own devices
+                device = await conn.fetchrow(
+                    "SELECT 1 FROM devices WHERE agent_id = $1 AND user_id = $2",
+                    str(agent_id), user.id
+                )
             
             if not device:
                 raise HTTPException(
-                    status_code=404,
-                    detail="Device not found or access denied"
+                    status_code=403,
+                    detail="Access forbidden: You do not have access to this device"
                 )
             
             # Get metrics within timespan

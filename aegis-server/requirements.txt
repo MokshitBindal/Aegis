@@ -33,6 +33,10 @@ uvicorn==0.38.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==15.0.1
+# ML dependencies
+scikit-learn==1.5.2
+joblib==1.4.2
+numpy==1.26.4
 # Development dependencies
 mypy==1.9.0
 ruff==0.3.4

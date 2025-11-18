@@ -1,5 +1,5 @@
 // src/hooks/useWebSocket.ts
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
 const WEBSOCKET_URL = "ws://127.0.0.1:8000/ws";

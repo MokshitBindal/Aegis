@@ -1,5 +1,4 @@
 # OS-generated files
-.gitignore
 .DS_Store
 .DS_Store?
 ._*
@@ -8,10 +7,60 @@
 ehthumbs.db
 Thumbs.db
 
-# Extra Files
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
 detect_os.sh
+*.tmp
+*.temp
+
+# Documentation (keep these local)
 aegis-Dev-docs/
-ANALYSIS_REPORT.md
-aegis-Dev-docs/IMPLEMENTATION_ROADMAP.md
-aegis-Dev-docs/AUDIT_REPORT.md
-aegis-Dev-docs/DATABASE_SCHEMA_ANALYSIS.md
+PROJECT_KNOWLEDGE_BASE.md
+TESTING_GUIDE.md
+*.md.backup
+
+# Research and development notes
+aegis-ml-engine/PROJECT_IMPROVEMENTS.md
+aegis-ml-engine/RESULTS.md
+aegis-ml-engine/SUBMISSION_SUMMARY.md
+*.pdf
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
