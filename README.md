@@ -222,11 +222,13 @@ Production-ready installation scripts for all platforms.
 **Note:** ML training and research code is available in the [`ml-research`](../../tree/ml-research) branch.
 
 The production server uses pre-trained models located in `aegis-server/models/`:
+
 - `latest_model.pkl` - Trained Isolation Forest model
 - `latest_scaler.pkl` - Feature scaler
 - `latest_config.json` - Model configuration and metadata
 
 **To retrain or experiment with ML models:**
+
 ```bash
 git checkout ml-research
 cd aegis-ml-engine
