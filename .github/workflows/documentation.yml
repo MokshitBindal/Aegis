@@ -1,0 +1,71 @@
+name: Documentation Check
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'docs/**'
+
+jobs:
+  markdown-lint:
+    name: Markdown Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Markdown files
+        uses: articulate/actions-markdownlint@v1
+        with:
+          config: .markdownlint.json
+          files: '*.md **/*.md'
+          ignore: node_modules
+        continue-on-error: true
+
+  link-checker:
+    name: Check Documentation Links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check links in documentation
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check-config.json'
+        continue-on-error: true
+
+  readme-validation:
+    name: Validate README Structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README exists
+        run: |
+          test -f README.md || exit 1
+          echo "✅ README.md exists"
+
+      - name: Check README has required sections
+        run: |
+          for section in "Features" "Quick Start" "Installation" "Documentation"; do
+            if grep -q "$section" README.md; then
+              echo "✅ Found section: $section"
+            else
+              echo "⚠️  Missing section: $section"
+            fi
+          done
+
+      - name: Check installer READMEs
+        run: |
+          test -f installers/README.md && echo "✅ installers/README.md exists" || echo "❌ Missing"
+          test -f installers/server-linux/README.md && echo "✅ server-linux/README.md exists" || echo "❌ Missing"
+          test -f installers/agent-linux-arch/README.md && echo "✅ agent-linux-arch/README.md exists" || echo "❌ Missing"

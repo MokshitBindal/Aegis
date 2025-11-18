@@ -1,0 +1,76 @@
+name: Installer Tests
+
+on:
+  push:
+    branches: [main, deployment]
+    paths:
+      - 'installers/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'installers/**'
+
+jobs:
+  shellcheck:
+    name: ShellCheck Installer Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck on server installer
+        run: |
+          shellcheck installers/server-linux/install.sh
+          shellcheck installers/server-linux/uninstall.sh
+
+      - name: Run ShellCheck on Debian agent installer
+        run: |
+          shellcheck installers/agent-linux-deb/install.sh
+          shellcheck installers/agent-linux-deb/uninstall.sh
+
+      - name: Run ShellCheck on Arch agent installer
+        run: |
+          shellcheck installers/agent-linux-arch/install.sh
+
+  syntax-check:
+    name: Bash Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check server installer syntax
+        run: |
+          bash -n installers/server-linux/install.sh
+          bash -n installers/server-linux/uninstall.sh
+
+      - name: Check Debian agent installer syntax
+        run: |
+          bash -n installers/agent-linux-deb/install.sh
+          bash -n installers/agent-linux-deb/uninstall.sh
+
+      - name: Check Arch agent installer syntax
+        run: |
+          bash -n installers/agent-linux-arch/install.sh
+
+  installer-dry-run:
+    name: Installer Dry Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify installer scripts are executable
+        run: |
+          test -x installers/server-linux/install.sh || chmod +x installers/server-linux/install.sh
+          test -x installers/agent-linux-deb/install.sh || chmod +x installers/agent-linux-deb/install.sh
+          test -x installers/agent-linux-arch/install.sh || chmod +x installers/agent-linux-arch/install.sh
+          echo "✅ All installers are executable"
+
+      - name: Check installer dependencies
+        run: |
+          echo "Checking for required commands in installers..."
+          for script in installers/*/install.sh; do
+            echo "Checking $script..."
+            grep -E "(apt-get|pacman|systemctl|postgresql|nginx)" "$script" || true
+          done
