@@ -99,8 +99,8 @@ const LogsPage: React.FC = () => {
             );
             const mergedLogs = [...prevLogs, ...newLogs];
 
-            // Keep only last 10000 logs to prevent memory/performance issues
-            const recentLogs = mergedLogs.slice(-10000);
+            // Keep only last 1000 logs to prevent memory/performance issues
+            const recentLogs = mergedLogs.slice(-1000);
 
             // Cache in localStorage
             localStorage.setItem(cacheKey, JSON.stringify(recentLogs));
@@ -159,8 +159,8 @@ const LogsPage: React.FC = () => {
           // Append new log
           const newLogs = [...prev, logEntry];
 
-          // Keep only last 10000 logs (reasonable limit for performance)
-          const recentLogs = newLogs.slice(-10000);
+          // Keep only last 1000 logs (reasonable limit for performance)
+          const recentLogs = newLogs.slice(-1000);
 
           // Update cache with accumulated logs
           localStorage.setItem(cacheKey, JSON.stringify(recentLogs));
@@ -371,13 +371,13 @@ const LogsPage: React.FC = () => {
             {/* Log Count with Warning */}
             <div
               className={`px-3 py-2 rounded-md text-sm font-medium ${
-                logs.length >= 9000
+                logs.length >= 900
                   ? "bg-yellow-50 text-yellow-700"
                   : "bg-blue-50 text-blue-700"
               }`}
             >
               {filteredLogs.length} / {logs.length} logs
-              {logs.length >= 9000 && " (near limit!)"}
+              {logs.length >= 900 && " (near 1000 limit!)"}
             </div>
 
             {/* Clear Cache Button */}
@@ -385,17 +385,20 @@ const LogsPage: React.FC = () => {
               onClick={() => {
                 if (
                   window.confirm(
-                    `Clear all ${logs.length} cached logs? This will remove accumulated log history.`
+                    `Clear all ${logs.length} cached logs? New logs will be collected from this point forward.`
                   )
                 ) {
+                  // Clear cache and set timestamp to NOW
                   localStorage.removeItem(cacheKey);
-                  localStorage.removeItem(lastFetchKey);
+                  const now = new Date().toISOString();
+                  localStorage.setItem(lastFetchKey, now);
                   setLogs([]);
-                  window.location.reload();
+                  setLastUpdate(now);
+                  setLoading(false);
                 }
               }}
               className="px-3 py-2 bg-red-50 text-red-700 rounded-md text-sm font-medium hover:bg-red-100 transition-colors"
-              title="Clear accumulated logs and start fresh"
+              title="Clear accumulated logs and start collecting from now"
             >
               Clear Cache
             </button>

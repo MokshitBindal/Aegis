@@ -6,13 +6,18 @@ import { api } from "../lib/api";
 
 interface Alert {
   id: number;
+  alert_id: number;
   agent_id: string;
-  alert_type: string;
+  rule_name: string;
   severity: string;
-  message: string;
-  triggered_at: string;
-  assignment_status: string;
+  details: any;
   created_at: string;
+  assignment_status: string;
+  hostname?: string;
+  // Legacy fields for backward compatibility
+  alert_type?: string;
+  message?: string;
+  triggered_at?: string;
 }
 
 interface AlertAssignment {
@@ -26,6 +31,16 @@ interface AlertAssignment {
   resolved_at: string | null;
   escalated_at: string | null;
   escalated_to: number | null;
+  // Enriched fields from backend
+  rule_name?: string;
+  severity?: string;
+  hostname?: string;
+  agent_id?: string;
+}
+
+interface MyAssignmentsResponse {
+  total: number;
+  assignments: AlertAssignment[];
 }
 
 export default function AlertTriagePage() {
@@ -37,6 +52,7 @@ export default function AlertTriagePage() {
   const [activeTab, setActiveTab] = useState<"unassigned" | "my-assignments">(
     "unassigned"
   );
+  const [includeResolved, setIncludeResolved] = useState(true);
 
   // Modal states
   const [selectedAssignment, setSelectedAssignment] =
@@ -51,7 +67,9 @@ export default function AlertTriagePage() {
 
   const fetchUnassignedAlerts = async () => {
     try {
-      const response = await api.get("/api/alerts/unassigned");
+      const response = await api.get("/api/alerts/unassigned", {
+        params: { limit: 500 },
+      });
       setUnassignedAlerts(response.data);
     } catch (err) {
       console.error("Failed to fetch unassigned alerts:", err);
@@ -61,8 +79,17 @@ export default function AlertTriagePage() {
 
   const fetchMyAssignments = async () => {
     try {
-      const response = await api.get("/api/alerts/my-assignments");
-      setMyAssignments(response.data);
+      const response = await api.get<MyAssignmentsResponse>(
+        "/api/alerts/my-assignments",
+        {
+          params: { include_resolved: includeResolved },
+        }
+      );
+      // Handle both old format (array) and new format (object with assignments array)
+      const assignments = Array.isArray(response.data)
+        ? response.data
+        : response.data.assignments || [];
+      setMyAssignments(assignments);
     } catch (err) {
       console.error("Failed to fetch my assignments:", err);
       setError("Failed to load assignments");
@@ -73,11 +100,16 @@ export default function AlertTriagePage() {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
-      await Promise.all([fetchUnassignedAlerts(), fetchMyAssignments()]);
+      if (activeTab === "unassigned") {
+        await fetchUnassignedAlerts();
+      } else {
+        await fetchMyAssignments();
+      }
       setLoading(false);
     };
     fetchData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeResolved, activeTab]);
 
   const handleClaimAlert = async (alertId: number) => {
     if (!isAdmin) return;
@@ -179,27 +211,42 @@ export default function AlertTriagePage() {
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-4 mt-6 border-b border-gray-700">
-        <button
-          onClick={() => setActiveTab("unassigned")}
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeTab === "unassigned"
-              ? "text-blue-400 border-b-2 border-blue-400"
-              : "text-gray-400 hover:text-gray-300"
-          }`}
-        >
-          Unassigned Alerts ({unassignedAlerts.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("my-assignments")}
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeTab === "my-assignments"
-              ? "text-blue-400 border-b-2 border-blue-400"
-              : "text-gray-400 hover:text-gray-300"
-          }`}
-        >
-          My Assignments ({myAssignments.length})
-        </button>
+      <div className="flex justify-between items-center mt-6 border-b border-gray-700">
+        <div className="flex gap-4">
+          <button
+            onClick={() => setActiveTab("unassigned")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === "unassigned"
+                ? "text-blue-400 border-b-2 border-blue-400"
+                : "text-gray-400 hover:text-gray-300"
+            }`}
+          >
+            Unassigned Alerts ({unassignedAlerts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("my-assignments")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === "my-assignments"
+                ? "text-blue-400 border-b-2 border-blue-400"
+                : "text-gray-400 hover:text-gray-300"
+            }`}
+          >
+            My Assignments ({myAssignments.length})
+          </button>
+        </div>
+
+        {/* Show Resolved Toggle - only visible on my-assignments tab */}
+        {activeTab === "my-assignments" && (
+          <label className="flex items-center gap-2 pb-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeResolved}
+              onChange={(e) => setIncludeResolved(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-600 rounded focus:ring-blue-500 bg-gray-700"
+            />
+            <span className="text-sm text-gray-300">Show Resolved</span>
+          </label>
+        )}
       </div>
 
       <main className="mt-6">
@@ -219,6 +266,9 @@ export default function AlertTriagePage() {
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-1 text-xs font-bold rounded bg-gray-700 text-gray-300">
+                          #{alert.id}
+                        </span>
                         <span
                           className={`px-2 py-1 text-xs font-bold rounded ${
                             alert.severity === "critical"
@@ -233,17 +283,17 @@ export default function AlertTriagePage() {
                           {alert.severity.toUpperCase()}
                         </span>
                         <span className="text-sm text-gray-400">
-                          {alert.alert_type}
+                          {alert.rule_name || alert.alert_type}
                         </span>
                       </div>
                       <p className="text-white font-medium mb-1">
-                        {alert.message}
+                        {alert.message || JSON.stringify(alert.details)}
                       </p>
                       <div className="text-sm text-gray-400">
+                        {alert.hostname && <p>Host: {alert.hostname}</p>}
                         <p>Agent ID: {alert.agent_id}</p>
                         <p>
-                          Triggered:{" "}
-                          {new Date(alert.triggered_at).toLocaleString()}
+                          Created: {new Date(alert.created_at).toLocaleString()}
                         </p>
                       </div>
                     </div>

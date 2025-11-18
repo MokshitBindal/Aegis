@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from internal.analysis.correlation import run_analysis_loop
 from internal.analysis.incident_aggregator import run_incident_aggregation_loop
 from internal.ml.data_exporter import init_data_exporter, get_data_exporter
+from internal.ml.ml_detector import init_ml_service, run_ml_detection_loop
 from internal.storage.postgres import close_db_pool, init_db_pool
 from internal.utils.cleanup_task import run_daily_cleanup
 from routers import (
@@ -25,6 +26,7 @@ from routers import (
     ingest,
     metrics,
     ml_data,
+    ml_detection,
     processes,
     query,
     user_management,
@@ -36,6 +38,7 @@ background_task = None
 aggregation_task = None
 cleanup_task = None
 data_export_task = None
+ml_detection_task = None
 
 
 async def run_data_export_loop():
@@ -61,7 +64,7 @@ async def run_data_export_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global background_task, aggregation_task, cleanup_task, data_export_task
+    global background_task, aggregation_task, cleanup_task, data_export_task, ml_detection_task
     print("Server starting up...")
     await init_db_pool()
     
@@ -69,6 +72,9 @@ async def lifespan(app: FastAPI):
     from internal.storage.postgres import get_db_pool
     pool = get_db_pool()
     init_data_exporter(pool)
+    
+    # Initialize ML detection service
+    init_ml_service(pool)
     
     # Clean up old invitation tokens with invalid hash format
     try:
@@ -98,6 +104,9 @@ async def lifespan(app: FastAPI):
     
     print("Starting data export task for ML training...")
     data_export_task = asyncio.create_task(run_data_export_loop())
+    
+    print("Starting ML anomaly detection task...")
+    ml_detection_task = asyncio.create_task(run_ml_detection_loop())
     
     yield  # Application runs here
     
@@ -134,6 +143,14 @@ async def lifespan(app: FastAPI):
             await data_export_task
         except asyncio.CancelledError:
             print("Data export task cancelled")
+    
+    if ml_detection_task:
+        print("Stopping ML detection task...")
+        ml_detection_task.cancel()
+        try:
+            await ml_detection_task
+        except asyncio.CancelledError:
+            print("ML detection task cancelled")
             
     await close_db_pool()
 
@@ -169,6 +186,7 @@ app.include_router(incidents.router, prefix="/api")
 app.include_router(commands.router, prefix="/api")
 app.include_router(processes.router)
 app.include_router(ml_data.router)
+app.include_router(ml_detection.router, prefix="/api")
 
 @app.get("/")
 async def root():

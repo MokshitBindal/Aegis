@@ -29,7 +29,7 @@ router = APIRouter()
 async def get_alerts(
     request: Request,
     agent_id: uuid.UUID | None = Query(None),  # Optional device filter
-    limit: int = 100,
+    limit: int = 1000,  # Increased from 100 to 1000 for better retention
     current_user: TokenData = Depends(get_current_user) # Secure endpoint
 ):
     """

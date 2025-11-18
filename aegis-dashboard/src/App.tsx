@@ -15,33 +15,30 @@ import MLDataPage from "./pages/MLDataPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { token: contextToken } = useAuth(); // Get token from context
-  const storedToken = localStorage.getItem("aegis_token"); // Get token from storage
+  const { token } = useAuth();
 
-  // --- ADD LOG HERE ---
-  console.log("ProtectedRoute Check:", { contextToken, storedToken });
-  // --------------------
-
-  const isAuthenticated = contextToken || storedToken;
-
-  if (!isAuthenticated) {
-    console.log("ProtectedRoute: Not authenticated, redirecting to /login"); // Optional log
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
 
 function AppRoutes() {
-  // ... (No changes in AppRoutes function)
+  const { token } = useAuth();
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"
         element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
+          token ? (
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          ) : (
+            <Navigate to="/login" replace />
+          )
         }
       />
       <Route

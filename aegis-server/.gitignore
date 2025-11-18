@@ -1,18 +1,47 @@
 # Python virtual environment
 venv/
+env/
 
 # Configuration files with secrets
 config.toml
+*.toml.local
 
 # Python cache
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+*.egg
+*.egg-info/
 
 # IDE files
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# ML data exports (CSV files)
+# ML models and data (keep only in repo as needed)
 ml_data/
 *.csv
+
+# Trained ML models (can be large)
+models/*.pkl
+models/*_*.json
+!models/latest_config.json
+
+# Logs
+*.log
+logs/
+
+# Database files (if using SQLite locally)
+*.db
+*.db-journal
+*.sqlite
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp

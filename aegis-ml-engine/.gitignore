@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Data files (don't commit large datasets)
+data/raw/*
+data/processed/*
+data/labeled/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/labeled/.gitkeep
+
+# Models (don't commit large model files)
+models/*.pkl
+models/*.h5
+models/*.pt
+!models/.gitkeep
+
+# Results and analysis files
+*.csv
+visualizations/
+RESULTS.md
+PROJECT_IMPROVEMENTS.md
+SUBMISSION_SUMMARY.md
+predictions.csv
+attack_test_results.csv
+ml_vs_rules_comparison.csv
+
+# Logs
+logs/*.log
+!logs/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+.env.local
