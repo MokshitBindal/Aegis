@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Pre-removal script for Aegis SIEM Server
+
+echo "🛑 Stopping Aegis SIEM Server..."
+
+# Stop services
+if systemctl is-active --quiet aegis-server; then
+    systemctl stop aegis-server
+fi
+
+# Disable services
+systemctl disable aegis-server.service 2>/dev/null || true
+
+echo "✅ Aegis SIEM Server stopped"
+
+exit 0

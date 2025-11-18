@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+
+# Post-installation script for Aegis SIEM Agent
+
+echo "🔧 Configuring Aegis SIEM Agent..."
+
+# Create system user
+if ! id -u aegis-agent >/dev/null 2>&1; then
+    useradd --system --home /opt/aegis-agent --shell /bin/false aegis-agent
+fi
+
+# Set permissions
+chown -R aegis-agent:aegis-agent /opt/aegis-agent
+chown -R aegis-agent:aegis-agent /var/log/aegis-agent
+chmod 750 /opt/aegis-agent
+chmod 750 /var/log/aegis-agent
+
+# Install Python dependencies
+cd /opt/aegis-agent
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Reload systemd
+systemctl daemon-reload
+
+# Enable service
+systemctl enable aegis-agent.service
+
+echo "✅ Aegis SIEM Agent installed successfully!"
+echo ""
+echo "📋 Next steps:"
+echo "1. Configure server connection: /opt/aegis-agent/.env"
+echo "   - Set AEGIS_SERVER_URL"
+echo "   - Set REGISTRATION_TOKEN (from dashboard)"
+echo "2. Start agent: sudo systemctl start aegis-agent"
+echo "3. Check status: sudo systemctl status aegis-agent"
+echo ""
+echo "📖 Documentation: https://github.com/MokshitBindal/Aegis"
+
+exit 0

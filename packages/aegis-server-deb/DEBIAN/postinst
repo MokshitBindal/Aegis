@@ -1,0 +1,55 @@
+#!/bin/bash
+set -e
+
+# Post-installation script for Aegis SIEM Server
+
+echo "🔧 Configuring Aegis SIEM Server..."
+
+# Create system user
+if ! id -u aegis-server >/dev/null 2>&1; then
+    useradd --system --home /opt/aegis-siem --shell /bin/false aegis-server
+fi
+
+# Set permissions
+chown -R aegis-server:aegis-server /opt/aegis-siem
+chown -R aegis-server:aegis-server /var/log/aegis-siem
+chmod 750 /opt/aegis-siem
+chmod 750 /var/log/aegis-siem
+
+# Install Python dependencies
+cd /opt/aegis-siem/server
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Install Node.js dependencies and build dashboard
+cd /opt/aegis-siem/dashboard
+npm install
+npm run build
+
+# Initialize database
+if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw aegis_db; then
+    sudo -u postgres createdb aegis_db
+    sudo -u postgres psql -c "CREATE USER aegis_user WITH PASSWORD 'changeme';"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE aegis_db TO aegis_user;"
+fi
+
+# Reload systemd
+systemctl daemon-reload
+
+# Enable services
+systemctl enable aegis-server.service
+systemctl enable nginx
+
+echo "✅ Aegis SIEM Server installed successfully!"
+echo ""
+echo "📋 Next steps:"
+echo "1. Configure database password: /opt/aegis-siem/server/.env"
+echo "2. Start services: sudo systemctl start aegis-server"
+echo "3. Configure Nginx: /etc/nginx/sites-available/aegis-siem"
+echo "4. Access dashboard: http://localhost"
+echo ""
+echo "📖 Documentation: https://github.com/MokshitBindal/Aegis"
+
+exit 0

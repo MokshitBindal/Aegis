@@ -1,0 +1,204 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build-server-deb:
+    name: Build Server Package (Debian/Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Build server .deb package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev rsync
+          bash packages/build-server-deb.sh
+
+      - name: Upload server package
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-server-deb
+          path: dist/aegis-siem-server_*.deb
+
+  build-agent-deb:
+    name: Build Agent Package (Debian/Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build agent .deb package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev rsync
+          bash packages/build-agent-deb.sh
+
+      - name: Upload agent .deb package
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-agent-deb
+          path: dist/aegis-siem-agent_*.deb
+
+  build-agent-macos:
+    name: Build Agent Package (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build agent .pkg package
+        run: |
+          bash packages/build-agent-macos.sh
+
+      - name: Upload agent .pkg package
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-agent-macos
+          path: dist/Aegis-SIEM-Agent-*.pkg
+
+  build-agent-windows:
+    name: Build Agent Package (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+
+      - name: Build agent .exe installer
+        run: |
+          powershell -File packages/build-agent-windows.ps1
+
+      - name: Build with NSIS
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" packages\aegis-agent-windows\installer.nsi
+
+      - name: Upload agent .exe installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-agent-windows
+          path: dist/Aegis-SIEM-Agent-*.exe
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-server-deb, build-agent-deb, build-agent-macos, build-agent-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts/
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release Notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          # Aegis SIEM v${{ steps.get_version.outputs.VERSION }}
+
+          Enterprise Security Information and Event Management System
+
+          ## 📦 Installation Packages
+
+          ### Server (Ubuntu/Debian)
+          - `aegis-siem-server_${{ steps.get_version.outputs.VERSION }}_amd64.deb` - Complete server installation with dashboard
+
+          ### Agent Packages
+          - `aegis-siem-agent_${{ steps.get_version.outputs.VERSION }}_amd64.deb` - Ubuntu/Debian agent
+          - `Aegis-SIEM-Agent-${{ steps.get_version.outputs.VERSION }}-macOS.pkg` - macOS agent
+          - `Aegis-SIEM-Agent-${{ steps.get_version.outputs.VERSION }}-Windows-x64.exe` - Windows agent
+
+          ## 🚀 Features
+
+          - **Real-time Monitoring** - System metrics, logs, commands, and processes
+          - **ML-Based Anomaly Detection** - Isolation Forest algorithm for behavioral analysis
+          - **Alert Management** - Comprehensive triage workflow with RBAC
+          - **Multi-Platform Support** - Linux, Windows, and macOS agents
+          - **Enterprise-Ready** - PostgreSQL, FastAPI backend, React dashboard
+
+          ## 📖 Documentation
+
+          - [Installation Guide](https://github.com/MokshitBindal/Aegis/blob/main/installers/README.md)
+          - [Testing Guide](https://github.com/MokshitBindal/Aegis/blob/main/TESTING_GUIDE.md)
+          - [ML Research Branch](https://github.com/MokshitBindal/Aegis/tree/ml-research)
+
+          ## 🔐 Security
+
+          All packages are built from tagged releases and can be verified against source code.
+
+          ## 📋 System Requirements
+
+          **Server:**
+          - Debian 11+ or Ubuntu 20.04+
+          - 2GB RAM, 2 CPU cores minimum
+          - PostgreSQL 12+, Nginx
+
+          **Agent:**
+          - Python 3.11+
+          - 512MB RAM, 1 CPU core
+          - Linux, Windows, or macOS
+
+          ## 🆘 Support
+
+          - Issues: https://github.com/MokshitBindal/Aegis/issues
+          - Documentation: https://github.com/MokshitBindal/Aegis
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Aegis SIEM v${{ steps.get_version.outputs.VERSION }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/aegis-server-deb/*.deb
+            artifacts/aegis-agent-deb/*.deb
+            artifacts/aegis-agent-macos/*.pkg
+            artifacts/aegis-agent-windows/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Pre-removal script for Aegis SIEM Agent
+
+echo "🛑 Stopping Aegis SIEM Agent..."
+
+# Stop services
+if systemctl is-active --quiet aegis-agent; then
+    systemctl stop aegis-agent
+fi
+
+# Disable services
+systemctl disable aegis-agent.service 2>/dev/null || true
+
+echo "✅ Aegis SIEM Agent stopped"
+
+exit 0
