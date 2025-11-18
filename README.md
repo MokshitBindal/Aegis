@@ -42,6 +42,7 @@ sudo bash install.sh
 ```
 
 This installs:
+
 - PostgreSQL database
 - Backend API server
 - Frontend dashboard
@@ -57,12 +58,14 @@ sudo bash install.sh
 ```
 
 **For Arch Linux:**
+
 ```bash
 cd Aegis/installers/agent-linux-arch
 sudo bash install.sh
 ```
 
 You'll need:
+
 - Server URL
 - Registration token (generate from dashboard)
 
@@ -112,23 +115,27 @@ You'll need:
 ## 🛠️ Technology Stack
 
 **Backend:**
+
 - FastAPI (Python 3.11+)
 - PostgreSQL
 - asyncpg
 - Pydantic
 
 **Frontend:**
+
 - React 18
 - TypeScript
 - Vite
 - TailwindCSS
 
 **ML Engine:**
+
 - scikit-learn (Isolation Forest)
 - pandas, numpy
 - Feature engineering pipeline
 
 **Agents:**
+
 - Python 3.11+
 - psutil (system metrics)
 - systemd integration
@@ -150,18 +157,21 @@ You'll need:
 ## 📊 System Requirements
 
 ### Server (Minimum)
+
 - 2 CPU cores
 - 2GB RAM
 - 10GB disk space
 - Debian 11+ or Ubuntu 20.04+
 
 ### Server (Recommended for 50+ devices)
+
 - 4+ CPU cores
 - 8GB RAM
 - 100GB disk space
 - SSD storage
 
 ### Agent (Per Device)
+
 - 512MB RAM
 - 1 CPU core
 - 100MB disk space
@@ -192,18 +202,23 @@ Test the complete installation on virtual machines:
 ## 📦 Components
 
 ### Server (`aegis-server/`)
+
 FastAPI backend with ML detection, alert correlation, and data management.
 
 ### Dashboard (`aegis-dashboard/`)
+
 React-based web interface for monitoring and management.
 
 ### Agent (`aegis-agent/`)
+
 Lightweight monitoring agent for data collection.
 
 ### ML Engine (`aegis-ml-engine/`)
+
 Machine learning model training and evaluation tools.
 
 ### Installers (`installers/`)
+
 Production-ready installation scripts for all platforms.
 
 ---
@@ -228,6 +243,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👥 Author
 
 **Mokshit Bindal**
+
 - GitHub: [@MokshitBindal](https://github.com/MokshitBindal)
 
 ---
