@@ -1,0 +1,57 @@
+# Maintainer: Mokshit Bindal <your-email@example.com>
+pkgname=aegis-agent
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Aegis SIEM Agent - System monitoring and security agent"
+arch=('x86_64' 'aarch64')
+url="https://github.com/MokshitBindal/Aegis"
+license=('MIT')
+depends=('python' 'python-pip' 'systemd')
+optdepends=('python-psutil: For system metrics collection'
+            'python-requests: For API communication')
+backup=('etc/aegis-agent/config.conf')
+install=${pkgname}.install
+
+source=("${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')  # Update after creating tarball
+
+_installdir="/opt/aegis-agent"
+
+prepare() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+    # Any preparation steps
+}
+
+build() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+    
+    # Create virtual environment
+    python -m venv venv
+    
+    # Install dependencies
+    ./venv/bin/pip install --upgrade pip
+    ./venv/bin/pip install -r requirements.txt
+}
+
+package() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+    
+    # Create directories
+    install -dm755 "${pkgdir}/${_installdir}"
+    install -dm755 "${pkgdir}/etc/aegis-agent"
+    install -dm755 "${pkgdir}/var/log/aegis-agent"
+    
+    # Copy agent files
+    cp -r * "${pkgdir}/${_installdir}/"
+    
+    # Install systemd service
+    install -Dm644 "scripts/aegis-agent.service" \
+        "${pkgdir}/usr/lib/systemd/system/aegis-agent.service"
+    
+    # Install configuration template
+    install -Dm644 "config.example" \
+        "${pkgdir}/etc/aegis-agent/config.conf"
+    
+    # Set permissions
+    chmod 755 "${pkgdir}/${_installdir}/main.py"
+}

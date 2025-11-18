@@ -191,3 +191,12 @@ app.include_router(ml_detection.router, prefix="/api")
 @app.get("/")
 async def root():
     return {"message": "Aegis SIEM Server is running."}
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment services"""
+    return {
+        "status": "healthy",
+        "service": "aegis-siem-server",
+        "version": "1.0.0"
+    }
