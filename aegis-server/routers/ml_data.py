@@ -118,9 +118,9 @@ async def get_export_status(
             total_metrics = await conn.fetchval("SELECT COUNT(*) FROM system_metrics")
             unexported_metrics = max(0, total_metrics - exporter.last_export_counts['metrics'])
             
-            # Count processes from history table (all snapshots for ML)
+            # Count processes (all snapshots for ML)
             try:
-                total_processes = await conn.fetchval("SELECT COUNT(*) FROM processes_history")
+                total_processes = await conn.fetchval("SELECT COUNT(*) FROM processes")
                 unexported_processes = max(0, total_processes - exporter.last_export_counts['processes'])
             except asyncpg.exceptions.UndefinedTableError:
                 unexported_processes = 0

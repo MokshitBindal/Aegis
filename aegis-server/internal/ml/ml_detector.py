@@ -56,14 +56,15 @@ class MLDetectionService:
                 features['is_weekend'] = 1 if end_time.weekday() >= 5 else 0
                 
                 # 2. System metrics features
+                # Extract from JSONB columns in system_metrics table
                 metrics = await conn.fetchrow("""
                     SELECT 
-                        AVG(cpu_percent) as avg_cpu,
-                        AVG(memory_percent) as avg_memory,
-                        AVG(disk_percent) as avg_disk,
-                        AVG(network_mb_sent) as avg_net_sent,
-                        AVG(network_mb_recv) as avg_net_recv
-                    FROM metrics
+                        AVG((cpu_data->>'cpu_percent')::float) as avg_cpu,
+                        AVG((memory_data->>'memory_percent')::float) as avg_memory,
+                        AVG(COALESCE((disk_data->>'disk_percent')::float, (disk_data->>'percent')::float)) as avg_disk,
+                        SUM((network_data->>'bytes_sent')::bigint) / 1024.0 / 1024.0 as avg_net_sent,
+                        SUM((network_data->>'bytes_recv')::bigint) / 1024.0 / 1024.0 as avg_net_recv
+                    FROM system_metrics
                     WHERE agent_id = $1 
                     AND timestamp >= $2 
                     AND timestamp < $3
